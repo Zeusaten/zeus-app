@@ -4,7 +4,8 @@
   "type": "module",
   "main": "index.mjs",
   "scripts": {
-    "dev": "node index.mjs"
+    "dev": "node index.mjs",
+    "start": "node index.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.18.0",
