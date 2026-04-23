@@ -27,13 +27,27 @@ function sleep(ms) {
 }
 
 function isRetryableGeminiError(error) {
-  const message = JSON.stringify(error || "").toLowerCase();
+  const rawMessage =
+    error?.message ||
+    error?.error?.message ||
+    JSON.stringify(error || "");
+
+  const message = String(rawMessage).toLowerCase();
+
+  const status =
+    error?.status ||
+    error?.code ||
+    error?.error?.code ||
+    null;
 
   return (
+    status === 503 ||
+    status === "503" ||
     message.includes('"code":503') ||
     message.includes('"status":"unavailable"') ||
     message.includes("high demand") ||
-    message.includes("unavailable")
+    message.includes("unavailable") ||
+    message.includes("temporarily unavailable")
   );
 }
 
@@ -271,7 +285,7 @@ async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
   let lastError = null;
 
   for (const currentModel of modelsToTry) {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       try {
         return await ai.models.generateContent({
           model: currentModel,
@@ -288,9 +302,9 @@ async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
           throw error;
         }
 
-        const waitMs = 1200 * (attempt + 1);
+        const waitMs = 3000 * (attempt + 1);
         console.warn(
-          `Gemini occupato su modello ${currentModel}, tentativo ${attempt + 1}/3. Riprovo tra ${waitMs}ms`
+          `Modello ${currentModel} occupato, tentativo ${attempt + 1}/4. Attendo ${waitMs}ms`
         );
         await sleep(waitMs);
       }
@@ -344,6 +358,14 @@ Continua adesso:
   return sanitizeFinalText(text);
 }
 
+app.get("/", (_req, res) => {
+  res.json({
+    ok: true,
+    message: "Zeus server online",
+    health: "/api/health",
+  });
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, model, fallbackModel });
 });
@@ -390,12 +412,15 @@ Rispondi ora come Zeus.
     if (isRetryableGeminiError(error)) {
       return res.status(503).json({
         error:
-          "Il cervello di Zeus è temporaneamente occupato. Riprova tra qualche secondo.",
+          "Zeus è momentaneamente sotto carico. Aspetta qualche secondo e riprova.",
       });
     }
 
-    res.status(500).json({
-      error: error?.message || "Errore interno del server",
+    console.error("Errore non gestito Gemini:", error);
+
+    return res.status(500).json({
+      error:
+        "Si è verificato un errore temporaneo nel cervello di Zeus. Riprova tra poco.",
     });
   }
 });
