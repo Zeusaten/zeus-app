@@ -724,3 +724,127 @@ a {
     padding-bottom: 120px;
   }
 }
+.canva-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.canva-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 10px;
+}
+
+.canva-dot.connected {
+  background: #10b981;
+  box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.12);
+}
+
+.canva-dot.disconnected {
+  background: #f59e0b;
+  box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.12);
+}
+
+.canva-status-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #24304f;
+}
+
+.canva-dimensions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 92px;
+  gap: 10px;
+  margin-top: 8px;
+  margin-bottom: 14px;
+}
+
+.canva-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canva-input-group label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.canva-input-group.unit {
+  min-width: 0;
+}
+
+.canva-number-input,
+.canva-unit-select {
+  width: 100%;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(99, 116, 255, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  color: #1a223b;
+  padding: 0 12px;
+  outline: none;
+}
+
+.canva-number-input:focus,
+.canva-unit-select:focus {
+  border-color: rgba(93, 112, 255, 0.34);
+}
+
+.canva-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.canva-toolbar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.canva-primary-button {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(93, 112, 255, 0.16);
+  background: linear-gradient(
+    135deg,
+    rgba(93, 112, 255, 0.14),
+    rgba(122, 92, 255, 0.14)
+  );
+  color: #24304f;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.canva-primary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.canva-error {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.14);
+  color: #b42318;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 740px) {
+  .canva-dimensions {
+    grid-template-columns: 1fr;
+  }
+
+  .canva-toolbar {
+    grid-template-columns: 1fr;
+  }
+}

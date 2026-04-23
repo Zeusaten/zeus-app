@@ -166,6 +166,28 @@ function getStatusLabel(statusText, isLoading) {
   return statusText;
 }
 
+function convertToPx(value, unit) {
+  const numeric = Number(value);
+
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return null;
+  }
+
+  if (unit === "px") {
+    return Math.round(numeric);
+  }
+
+  if (unit === "mm") {
+    return Math.round((numeric / 25.4) * 96);
+  }
+
+  if (unit === "cm") {
+    return Math.round((numeric / 2.54) * 96);
+  }
+
+  return Math.round(numeric);
+}
+
 function App() {
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem(STORAGE_CONVERSATIONS);
@@ -213,9 +235,8 @@ function App() {
     expiresAt: null,
     scopes: null,
   });
-
   const [canvaBusy, setCanvaBusy] = useState(false);
-  const [canvaNotice, setCanvaNotice] = useState("");
+  const [canvaError, setCanvaError] = useState("");
   const [canvaDesign, setCanvaDesign] = useState(() => {
     const saved = localStorage.getItem(STORAGE_CANVA_LAST_DESIGN);
 
@@ -229,6 +250,9 @@ function App() {
 
     return null;
   });
+  const [canvaWidth, setCanvaWidth] = useState("1080");
+  const [canvaHeight, setCanvaHeight] = useState("1350");
+  const [canvaUnit, setCanvaUnit] = useState("px");
 
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -326,11 +350,11 @@ function App() {
     function handleMessage(event) {
       if (event?.data?.type === "CANVA_CONNECTED") {
         refreshCanvaStatus();
-        setCanvaNotice("Canva collegato con successo.");
+        setCanvaError("");
       }
 
       if (event?.data?.type === "CANVA_ERROR") {
-        setCanvaNotice(event?.data?.message || "Errore collegamento Canva");
+        setCanvaError(event?.data?.message || "Errore collegamento Canva");
       }
     }
 
@@ -412,14 +436,22 @@ function App() {
   }
 
   async function handleCreateInstagramDesign() {
+    const widthPx = convertToPx(canvaWidth, canvaUnit);
+    const heightPx = convertToPx(canvaHeight, canvaUnit);
+
+    if (!widthPx || !heightPx) {
+      setCanvaError("Inserisci dimensioni valide.");
+      return;
+    }
+
     try {
       setCanvaBusy(true);
-      setCanvaNotice("");
+      setCanvaError("");
 
       const data = await createCanvaDesign({
-        title: `Post Instagram Zeus ${new Date().toLocaleDateString("it-IT")}`,
-        width: 1080,
-        height: 1350,
+        title: `Design Zeus ${new Date().toLocaleDateString("it-IT")}`,
+        width: widthPx,
+        height: heightPx,
       });
 
       const design = data?.design || null;
@@ -429,14 +461,13 @@ function App() {
       }
 
       setCanvaDesign(design);
-      setCanvaNotice("Design Canva creato con successo.");
 
       if (design?.urls?.edit_url) {
         window.open(design.urls.edit_url, "_blank");
       }
     } catch (error) {
       console.error(error);
-      setCanvaNotice(error?.message || "Errore creazione design Canva");
+      setCanvaError(error?.message || "Errore creazione design Canva");
     } finally {
       setCanvaBusy(false);
     }
@@ -444,22 +475,23 @@ function App() {
 
   function handleOpenCanvaDesign() {
     if (!canvaDesign?.urls?.edit_url) {
-      setCanvaNotice("Nessun design Canva apribile trovato.");
+      setCanvaError("Nessun design Canva disponibile.");
       return;
     }
 
+    setCanvaError("");
     window.open(canvaDesign.urls.edit_url, "_blank");
   }
 
   async function handleExportLastDesign() {
     if (!canvaDesign?.id) {
-      setCanvaNotice("Nessun design Canva disponibile da esportare.");
+      setCanvaError("Nessun design Canva da esportare.");
       return;
     }
 
     try {
       setCanvaBusy(true);
-      setCanvaNotice("Export PNG in corso...");
+      setCanvaError("");
 
       const start = await createCanvaExport(canvaDesign.id, "png");
       const exportId = start?.job?.id;
@@ -478,14 +510,12 @@ function App() {
         result?.job?.download_url ||
         result?.job?.result?.url;
 
-      setCanvaNotice("Export PNG pronto.");
-
       if (downloadUrl) {
         window.open(downloadUrl, "_blank");
       }
     } catch (error) {
       console.error(error);
-      setCanvaNotice(error?.message || "Errore export Canva");
+      setCanvaError(error?.message || "Errore export Canva");
     } finally {
       setCanvaBusy(false);
     }
@@ -650,34 +680,95 @@ function App() {
               }`}
             ></span>
             <span className="canva-status-text">
-              {canvaStatus.connected ? "Canva collegato" : "Canva non collegato"}
+              {canvaStatus.connected ? "Connesso" : "Non collegato"}
             </span>
           </div>
 
-          {canvaDesign && (
-            <div className="canva-design-box">
-              <div className="canva-design-title">
-                {canvaDesign.title || "Ultimo design Canva"}
+          {canvaStatus.connected && (
+            <>
+              <div className="canva-dimensions">
+                <div className="canva-input-group">
+                  <label>Larghezza</label>
+                  <input
+                    className="canva-number-input"
+                    type="number"
+                    min="1"
+                    value={canvaWidth}
+                    onChange={(e) => setCanvaWidth(e.target.value)}
+                  />
+                </div>
+
+                <div className="canva-input-group">
+                  <label>Altezza</label>
+                  <input
+                    className="canva-number-input"
+                    type="number"
+                    min="1"
+                    value={canvaHeight}
+                    onChange={(e) => setCanvaHeight(e.target.value)}
+                  />
+                </div>
+
+                <div className="canva-input-group unit">
+                  <label>Unità</label>
+                  <select
+                    className="canva-unit-select"
+                    value={canvaUnit}
+                    onChange={(e) => setCanvaUnit(e.target.value)}
+                  >
+                    <option value="px">px</option>
+                    <option value="mm">mm</option>
+                    <option value="cm">cm</option>
+                  </select>
+                </div>
               </div>
-              <div className="canva-design-id">ID: {canvaDesign.id}</div>
-            </div>
+
+              <div className="canva-actions">
+                <button
+                  type="button"
+                  className="canva-primary-button"
+                  onClick={handleCreateInstagramDesign}
+                  disabled={canvaBusy}
+                >
+                  {canvaBusy ? "Attendi..." : "Crea design"}
+                </button>
+
+                <div className="canva-toolbar">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleOpenCanvaDesign}
+                    disabled={canvaBusy || !canvaDesign?.urls?.edit_url}
+                  >
+                    Apri
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleExportLastDesign}
+                    disabled={canvaBusy || !canvaDesign?.id}
+                  >
+                    PNG
+                  </button>
+                </div>
+              </div>
+            </>
           )}
 
-          {canvaNotice && <div className="canva-note">{canvaNotice}</div>}
-
-          <div className="canva-actions">
-            {!canvaStatus.connected ? (
+          {!canvaStatus.connected && (
+            <div className="canva-actions">
               <button
                 type="button"
                 className="canva-primary-button"
                 onClick={() => {
                   try {
-                    setCanvaNotice("Apro Canva in una finestra separata...");
+                    setCanvaError("");
                     startCanvaConnect(async () => {
                       await refreshCanvaStatus();
                     });
                   } catch (error) {
-                    setCanvaNotice(
+                    setCanvaError(
                       error?.message || "Errore apertura popup Canva"
                     );
                   }
@@ -686,37 +777,10 @@ function App() {
               >
                 Collega Canva
               </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="canva-primary-button"
-                  onClick={handleCreateInstagramDesign}
-                  disabled={canvaBusy}
-                >
-                  {canvaBusy ? "Attendi..." : "Crea post IG"}
-                </button>
+            </div>
+          )}
 
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={handleOpenCanvaDesign}
-                  disabled={canvaBusy || !canvaDesign?.urls?.edit_url}
-                >
-                  Apri ultimo design
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={handleExportLastDesign}
-                  disabled={canvaBusy || !canvaDesign?.id}
-                >
-                  Esporta PNG
-                </button>
-              </>
-            )}
-          </div>
+          {canvaError && <div className="canva-error">{canvaError}</div>}
         </div>
 
         <div className="sidebar-card conversations-card">
