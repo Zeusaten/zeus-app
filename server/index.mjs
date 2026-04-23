@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
+import { registerCanvaRoutes } from "./canva.mjs";
 
 dotenv.config();
 
@@ -34,14 +35,31 @@ function getErrorText(error) {
   ).toLowerCase();
 }
 
-function isRetryableGeminiError(error) {
-  const message = getErrorText(error);
-
-  const status =
+function getErrorStatus(error) {
+  return (
     error?.status ||
     error?.code ||
     error?.error?.code ||
-    null;
+    null
+  );
+}
+
+function isQuotaExceededError(error) {
+  const message = getErrorText(error);
+  const status = getErrorStatus(error);
+
+  return (
+    status === 429 ||
+    status === "429" ||
+    message.includes("resource_exhausted") ||
+    message.includes("quota exceeded") ||
+    message.includes("rate limit")
+  );
+}
+
+function isRetryableGeminiError(error) {
+  const message = getErrorText(error);
+  const status = getErrorStatus(error);
 
   return (
     status === 503 ||
@@ -56,12 +74,7 @@ function isRetryableGeminiError(error) {
 
 function shouldFallbackWithoutSearch(error) {
   const message = getErrorText(error);
-
-  const status =
-    error?.status ||
-    error?.code ||
-    error?.error?.code ||
-    null;
+  const status = getErrorStatus(error);
 
   return (
     status === 400 ||
@@ -371,6 +384,14 @@ async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
       } catch (error) {
         lastError = error;
 
+        if (isQuotaExceededError(error)) {
+          console.warn(
+            `Quota esaurita sul modello ${currentModel}, provo il modello successivo se disponibile.`
+          );
+          mustRetryWithoutSearch = false;
+          break;
+        }
+
         if (shouldFallbackWithoutSearch(error)) {
           console.warn(
             `Ricerca web non disponibile sul modello ${currentModel}, provo senza ricerca.`
@@ -391,7 +412,7 @@ async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
       }
     }
 
-    if (mustRetryWithoutSearch || lastError) {
+    if (mustRetryWithoutSearch) {
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
           return await generateGeminiResponse(
@@ -402,6 +423,13 @@ async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
           );
         } catch (error) {
           lastError = error;
+
+          if (isQuotaExceededError(error)) {
+            console.warn(
+              `Quota esaurita sul modello ${currentModel} anche senza ricerca, provo il modello successivo se disponibile.`
+            );
+            break;
+          }
 
           if (!isRetryableGeminiError(error)) {
             throw error;
@@ -549,6 +577,13 @@ Rispondi ora come Zeus.
   } catch (error) {
     console.error("Errore /api/chat:", error);
 
+    if (isQuotaExceededError(error)) {
+      return res.status(429).json({
+        error:
+          "Hai raggiunto la quota disponibile di Gemini per questo modello. Riprova più tardi oppure usa un modello diverso.",
+      });
+    }
+
     if (isRetryableGeminiError(error)) {
       return res.status(503).json({
         error:
@@ -562,6 +597,8 @@ Rispondi ora come Zeus.
     });
   }
 });
+
+registerCanvaRoutes(app);
 
 app.listen(port, () => {
   console.log(`Zeus server attivo su http://localhost:${port}`);
