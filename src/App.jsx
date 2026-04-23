@@ -101,14 +101,19 @@ function App() {
         setStatusText("Zeus è pronto");
       } catch (error) {
         console.error(error);
-        setStatusText(`Errore: ${error?.message || "sconosciuto"}`);
+        setStatusText("Zeus si sta riattivando...");
 
-        const errorReply = {
-          sender: "zeus",
-          text: `Errore reale: ${error?.message || "sconosciuto"}`,
-        };
-
-        setMessages((prev) => [...prev, errorReply]);
+        setTimeout(async () => {
+          try {
+            await loadZeusEngine(setStatusText);
+            setStatusText("Zeus è pronto");
+          } catch (retryError) {
+            console.error(retryError);
+            setStatusText(
+              "Server Zeus temporaneamente lento. Puoi comunque riprovare tra poco."
+            );
+          }
+        }, 4000);
       }
     };
 
@@ -183,11 +188,13 @@ function App() {
         ...prev,
         {
           sender: "zeus",
-          text: `Errore reale: ${error?.message || "sconosciuto"}`,
+          text:
+            error?.message ||
+            "Il server di Zeus non è raggiungibile in questo momento.",
         },
       ]);
 
-      setStatusText(`Errore: ${error?.message || "sconosciuto"}`);
+      setStatusText("Connessione al server non riuscita");
     } finally {
       setIsLoading(false);
     }
@@ -285,7 +292,10 @@ function App() {
         <main className="main-panel">
           <section className="hero-panel">
             <span className="hero-badge">Zeus Interface</span>
-            <h2>Un sistema conversazionale premium, chiaro e progettato per il futuro.</h2>
+            <h2>
+              Un sistema conversazionale premium, chiaro e progettato per il
+              futuro.
+            </h2>
             <p>
               Zeus usa memoria strutturata, risposte certe sulle informazioni
               importanti e il modello solo quando serve davvero.
