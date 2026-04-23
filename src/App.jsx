@@ -22,6 +22,7 @@ import {
   pollCanvaExport,
   startCanvaConnect,
 } from "./services/canvaApi";
+import { searchCatalog } from "./services/catalogApi";
 
 const STORAGE_CONVERSATIONS = "zeus_conversations";
 const STORAGE_ACTIVE_CONVERSATION = "zeus_active_conversation";
@@ -222,6 +223,194 @@ function parsePagesInput(input) {
 function openUrls(urls = []) {
   const clean = urls.filter(Boolean);
   clean.forEach((url) => window.open(url, "_blank"));
+}
+
+function looksLikeCatalogQuery(text) {
+  const t = text.toLowerCase();
+
+  const productWords = [
+    "maglietta",
+    "magliette",
+    "tshirt",
+    "t-shirt",
+    "pantalone",
+    "pantaloni",
+    "felpa",
+    "felpe",
+    "scarpa",
+    "scarpe",
+    "prodotto",
+    "prodotti",
+    "taglia",
+    "disponibile",
+    "disponibili",
+    "brand",
+    "marca",
+    "catalogo",
+    "nero",
+    "nera",
+    "bianca",
+    "bianco",
+    "blu",
+    "verde",
+    "rosso",
+    "rossa",
+    "sotto",
+    "meno di",
+    "più di",
+    "sopra",
+  ];
+
+  return productWords.some((word) => t.includes(word));
+}
+
+function extractCatalogFilters(text) {
+  const t = text.toLowerCase();
+  const filters = {};
+
+  if (t.includes("uomo")) filters.gender = "Uomo";
+  if (t.includes("donna")) filters.gender = "Donna";
+
+  if (
+    t.includes("maglietta") ||
+    t.includes("magliette") ||
+    t.includes("tshirt") ||
+    t.includes("t-shirt")
+  ) {
+    filters.category = "Tshirt";
+  }
+
+  if (t.includes("disponibile") || t.includes("disponibili")) {
+    filters.availability = "IN_STOCK";
+  }
+
+  const sizePatterns = [
+    { regex: /\bxxl\b/i, value: "XXL" },
+    { regex: /\bxl\b/i, value: "XL" },
+    { regex: /\bxs\b/i, value: "XS" },
+    { regex: /\bm\b/i, value: "M" },
+    { regex: /\bl\b/i, value: "L" },
+    { regex: /\bs\b/i, value: "S" },
+  ];
+
+  for (const item of sizePatterns) {
+    if (item.regex.test(text)) {
+      filters.size = item.value;
+      break;
+    }
+  }
+
+  const knownBrands = [
+    "Dsquared",
+    "Tommy Hilfiger",
+    "Calvin Klein",
+    "North Sails",
+    "Guess",
+    "Vans",
+    "Refrigue",
+    "Harmont&Blaine",
+  ];
+
+  for (const brand of knownBrands) {
+    if (t.includes(brand.toLowerCase())) {
+      filters.brand = brand;
+      break;
+    }
+  }
+
+  const colorMap = [
+    "nero",
+    "nera",
+    "neri",
+    "nere",
+    "bianco",
+    "bianca",
+    "bianchi",
+    "bianche",
+    "blu",
+    "verde",
+    "rosso",
+    "rossa",
+    "giallo",
+    "gialla",
+    "grigio",
+    "grigia",
+  ];
+
+  for (const color of colorMap) {
+    if (t.includes(color)) {
+      if (color.startsWith("ner")) filters.color = "nero";
+      else if (color.startsWith("bian")) filters.color = "bianco";
+      else if (color.startsWith("ross")) filters.color = "rosso";
+      else if (color.startsWith("giall")) filters.color = "giallo";
+      else if (color.startsWith("grigi")) filters.color = "grigio";
+      else filters.color = color;
+      break;
+    }
+  }
+
+  const maxPriceMatch =
+    t.match(/sotto\s+i?\s*([0-9]+(?:[.,][0-9]+)?)/i) ||
+    t.match(/meno di\s*([0-9]+(?:[.,][0-9]+)?)/i) ||
+    t.match(/max(?:imum)?\s*([0-9]+(?:[.,][0-9]+)?)/i);
+
+  if (maxPriceMatch) {
+    filters.max_price = Number(maxPriceMatch[1].replace(",", "."));
+  }
+
+  const minPriceMatch =
+    t.match(/sopra\s+i?\s*([0-9]+(?:[.,][0-9]+)?)/i) ||
+    t.match(/pi[uù] di\s*([0-9]+(?:[.,][0-9]+)?)/i);
+
+  if (minPriceMatch) {
+    filters.min_price = Number(minPriceMatch[1].replace(",", "."));
+  }
+
+  if (
+    !filters.brand &&
+    !filters.category &&
+    !filters.gender &&
+    !filters.size &&
+    !filters.color &&
+    filters.min_price == null &&
+    filters.max_price == null
+  ) {
+    filters.q = text;
+  }
+
+  return filters;
+}
+
+function formatCatalogReply(results, filters) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return "Non ho trovato prodotti compatibili con la richiesta nel catalogo che ho sincronizzato.";
+  }
+
+  const introParts = [];
+  if (filters.category) introParts.push(filters.category);
+  if (filters.brand) introParts.push(filters.brand);
+  if (filters.gender) introParts.push(filters.gender);
+  if (filters.size) introParts.push(`taglia ${filters.size}`);
+  if (filters.color) introParts.push(filters.color);
+  if (filters.max_price) introParts.push(`max €${filters.max_price}`);
+
+  const intro = introParts.length
+    ? `Ho trovato questi prodotti (${introParts.join(", ")}):`
+    : "Ho trovato questi prodotti:";
+
+  const lines = results.slice(0, 8).map((item) => {
+    const sizes =
+      Array.isArray(item.available_sizes) && item.available_sizes.length > 0
+        ? item.available_sizes.join(", ")
+        : "nessuna taglia disponibile";
+
+    const price =
+      item.price != null ? `€${item.price}` : "prezzo non disponibile";
+
+    return `- **${item.name}** — ${price} — taglie disponibili: ${sizes}\n  ${item.url}`;
+  });
+
+  return `${intro}\n\n${lines.join("\n\n")}`;
 }
 
 function App() {
@@ -661,6 +850,22 @@ function App() {
           sender: "zeus",
           text: deterministicReply,
           grounded: false,
+          searchQueries: [],
+          sources: [],
+        });
+
+        setStatusText("Zeus è pronto");
+        return;
+      }
+
+      if (looksLikeCatalogQuery(userText)) {
+        const filters = extractCatalogFilters(userText);
+        const results = await searchCatalog(filters);
+
+        appendMessageToConversation(conversationId, {
+          sender: "zeus",
+          text: formatCatalogReply(results, filters),
+          grounded: true,
           searchQueries: [],
           sources: [],
         });

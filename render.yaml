@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: zeus-catalog-api
+    runtime: python
+    rootDir: zeus_catalog
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zeus-catalog-db
+          property: connectionString
+
+  - type: cron
+    name: zeus-catalog-sync
+    runtime: python
+    rootDir: zeus_catalog
+    buildCommand: pip install -r requirements.txt
+    startCommand: python sync_site.py
+    schedule: "0 */6 * * *"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zeus-catalog-db
+          property: connectionString
+
+databases:
+  - name: zeus-catalog-db
