@@ -1,22 +1,85 @@
-const CATALOG_API_BASE =
-  import.meta.env.VITE_CATALOG_API_BASE || "http://localhost:8000";
+let catalogCache = null;
 
-export async function searchCatalog(filters = {}) {
-  const params = new URLSearchParams();
+async function loadCatalogSnapshot() {
+  if (catalogCache) return catalogCache;
 
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && String(value).trim() !== "") {
-      params.append(key, value);
-    }
-  });
-
-  const res = await fetch(
-    `${CATALOG_API_BASE}/products/search_full?${params.toString()}`
-  );
+  const res = await fetch("/catalog/catalog.json", { cache: "no-store" });
 
   if (!res.ok) {
-    throw new Error("Catalog API non raggiungibile");
+    throw new Error("Snapshot catalogo non raggiungibile");
   }
 
-  return await res.json();
+  const data = await res.json();
+  catalogCache = Array.isArray(data?.products) ? data.products : [];
+  return catalogCache;
+}
+
+function includesCI(value, needle) {
+  return String(value || "").toLowerCase().includes(String(needle || "").toLowerCase());
+}
+
+export async function searchCatalog(filters = {}) {
+  const products = await loadCatalogSnapshot();
+
+  return products.filter((product) => {
+    if (filters.brand && String(product.brand).toLowerCase() !== String(filters.brand).toLowerCase()) {
+      return false;
+    }
+
+    if (filters.category && String(product.category).toLowerCase() !== String(filters.category).toLowerCase()) {
+      return false;
+    }
+
+    if (filters.gender && String(product.gender).toLowerCase() !== String(filters.gender).toLowerCase()) {
+      return false;
+    }
+
+    if (filters.color && !includesCI(product.name, filters.color)) {
+      return false;
+    }
+
+    if (filters.min_price != null && Number(product.price) < Number(filters.min_price)) {
+      return false;
+    }
+
+    if (filters.max_price != null && Number(product.price) > Number(filters.max_price)) {
+      return false;
+    }
+
+    if (filters.q && !includesCI(product.name, filters.q)) {
+      return false;
+    }
+
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+
+    if (filters.size) {
+      const hasSize = variants.some(
+        (v) => String(v.size).toLowerCase() === String(filters.size).toLowerCase()
+      );
+      if (!hasSize) return false;
+    }
+
+    if (filters.availability) {
+      if (filters.size) {
+        const hasAvailableSize = variants.some(
+          (v) =>
+            String(v.size).toLowerCase() === String(filters.size).toLowerCase() &&
+            String(v.availability).toLowerCase() === String(filters.availability).toLowerCase()
+        );
+        if (!hasAvailableSize) return false;
+      } else {
+        const hasAvailableVariant = variants.some(
+          (v) =>
+            String(v.availability).toLowerCase() === String(filters.availability).toLowerCase()
+        );
+        if (!hasAvailableVariant) return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+export function clearCatalogCache() {
+  catalogCache = null;
 }
