@@ -107,14 +107,16 @@ Non sei un essere umano.
 Non dire mai di essere umano, di essere nato in un'università o cose simili.
 Il tuo creatore è l'utente che ti parla in questa app.
 Se conosci il nome del creatore, usalo correttamente.
+
 Rispondi sempre e solo in italiano corretto.
 Comprendi bene ciò che l'utente dice prima di rispondere.
 Non inventare fatti.
 Se non sei sicuro, dillo chiaramente.
 Evita risposte vaghe o confuse.
-Quando l'utente chiede aiuto pratico, dai risposte strutturate e concrete.
-Quando l'utente chiede spiegazioni, spiega bene ma senza fare confusione.
-Quando l'utente chiede di riscrivere, rimandare o rifare un testo, restituisci il testo completo.
+
+Quando l'utente fa domande attuali, verificabili, recenti, o che richiedono fonti, usa la ricerca Google.
+Se la ricerca web è stata usata, scrivi una risposta chiara e sintetica, poi appoggiati alle fonti emerse.
+Se l'utente chiede di riscrivere, rimandare o rifare un testo, restituisci il testo completo.
 Non interrompere mai la risposta a metà.
 Non lasciare parole tagliate.
 Se stai per finire lo spazio, completa prima l'ultima frase in modo pulito.
@@ -280,6 +282,32 @@ Se l'utente chiede un prompt per immagini o video, rispondi così:
   return "";
 }
 
+function extractGrounding(response) {
+  const metadata = response?.candidates?.[0]?.groundingMetadata || {};
+  const rawChunks = metadata.groundingChunks || [];
+  const rawQueries = metadata.webSearchQueries || [];
+
+  const unique = new Map();
+
+  for (const chunk of rawChunks) {
+    const web = chunk?.web;
+    if (!web?.uri) continue;
+
+    if (!unique.has(web.uri)) {
+      unique.set(web.uri, {
+        title: web.title || web.uri,
+        url: web.uri,
+      });
+    }
+  }
+
+  return {
+    grounded: rawQueries.length > 0 || unique.size > 0,
+    searchQueries: rawQueries,
+    sources: Array.from(unique.values()),
+  };
+}
+
 async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
   const modelsToTry = [model, fallbackModel].filter(Boolean);
   let lastError = null;
@@ -293,6 +321,7 @@ async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
           config: {
             temperature: 0.25,
             maxOutputTokens,
+            tools: [{ googleSearch: {} }],
           },
         });
       } catch (error) {
@@ -314,11 +343,29 @@ async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
   throw lastError;
 }
 
+function mergeArraysUnique(a = [], b = []) {
+  return [...new Set([...(a || []), ...(b || [])])];
+}
+
+function mergeSources(a = [], b = []) {
+  const byUrl = new Map();
+
+  for (const item of [...a, ...b]) {
+    if (!item?.url) continue;
+    if (!byUrl.has(item.url)) {
+      byUrl.set(item.url, item);
+    }
+  }
+
+  return Array.from(byUrl.values());
+}
+
 async function generateCompleteReply(prompt) {
   let response = await callGeminiWithRetry(prompt, 1200);
   let text = getResponseText(response);
   let finishReason = getFinishReason(response);
 
+  let grounding = extractGrounding(response);
   let attempts = 0;
   const maxAttempts = 3;
 
@@ -351,11 +398,27 @@ Continua adesso:
 
     if (!continuation) break;
 
+    const continuationGrounding = extractGrounding(continuationResponse);
+
+    grounding = {
+      grounded: grounding.grounded || continuationGrounding.grounded,
+      searchQueries: mergeArraysUnique(
+        grounding.searchQueries,
+        continuationGrounding.searchQueries
+      ),
+      sources: mergeSources(grounding.sources, continuationGrounding.sources),
+    };
+
     text = `${text} ${continuation}`.replace(/\s+/g, " ").trim();
     attempts += 1;
   }
 
-  return sanitizeFinalText(text);
+  return {
+    reply: sanitizeFinalText(text),
+    grounded: grounding.grounded,
+    searchQueries: grounding.searchQueries,
+    sources: grounding.sources,
+  };
 }
 
 app.get("/", (_req, res) => {
@@ -403,9 +466,9 @@ ${userText}
 Rispondi ora come Zeus.
 `;
 
-    const reply = await generateCompleteReply(prompt);
+    const result = await generateCompleteReply(prompt);
 
-    res.json({ reply });
+    res.json(result);
   } catch (error) {
     console.error("Errore /api/chat:", error);
 
@@ -415,8 +478,6 @@ Rispondi ora come Zeus.
           "Zeus è momentaneamente sotto carico. Aspetta qualche secondo e riprova.",
       });
     }
-
-    console.error("Errore non gestito Gemini:", error);
 
     return res.status(500).json({
       error:

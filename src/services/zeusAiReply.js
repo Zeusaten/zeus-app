@@ -103,5 +103,11 @@ export async function getZeusAiReply(
   }
 
   const data = await response.json();
-  return data.reply;
+
+  return {
+    reply: data.reply || "Non sono riuscito a generare una risposta valida.",
+    grounded: Boolean(data.grounded),
+    searchQueries: Array.isArray(data.searchQueries) ? data.searchQueries : [],
+    sources: Array.isArray(data.sources) ? data.sources : [],
+  };
 }

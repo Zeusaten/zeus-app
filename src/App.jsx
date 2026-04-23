@@ -12,6 +12,9 @@ const DEFAULT_MESSAGES = [
   {
     sender: "zeus",
     text: "Ciao. Sono Zeus. Ti aiuto in italiano con idee, organizzazione e prompt.",
+    grounded: false,
+    searchQueries: [],
+    sources: [],
   },
 ];
 
@@ -19,7 +22,7 @@ const QUICK_PROMPTS = [
   "Chi ti ha creato?",
   "Come mi chiamo?",
   "Aiutami a organizzare una giornata produttiva",
-  "Scrivimi un prompt per un'immagine cinematografica",
+  "Cerca online le ultime notizie su Gemini",
 ];
 
 function ZeusAvatar() {
@@ -114,6 +117,26 @@ function getStatusMeta(statusText, isLoading) {
     toneClass: "status-pill waking",
     bannerTitle: "",
     bannerText: "",
+  };
+}
+
+function normalizeAssistantPayload(payload) {
+  if (typeof payload === "string") {
+    return {
+      text: payload,
+      grounded: false,
+      searchQueries: [],
+      sources: [],
+    };
+  }
+
+  return {
+    text: payload?.reply || "Non sono riuscito a generare una risposta valida.",
+    grounded: Boolean(payload?.grounded),
+    searchQueries: Array.isArray(payload?.searchQueries)
+      ? payload.searchQueries
+      : [],
+    sources: Array.isArray(payload?.sources) ? payload.sources : [],
   };
 }
 
@@ -239,7 +262,13 @@ function App() {
       if (deterministicReply) {
         setMessages((prev) => [
           ...prev,
-          { sender: "zeus", text: deterministicReply },
+          {
+            sender: "zeus",
+            text: deterministicReply,
+            grounded: false,
+            searchQueries: [],
+            sources: [],
+          },
         ]);
         setStatusText("Zeus è pronto");
         return;
@@ -252,7 +281,19 @@ function App() {
         setStatusText
       );
 
-      setMessages((prev) => [...prev, { sender: "zeus", text: aiReply }]);
+      const normalized = normalizeAssistantPayload(aiReply);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "zeus",
+          text: normalized.text,
+          grounded: normalized.grounded,
+          searchQueries: normalized.searchQueries,
+          sources: normalized.sources,
+        },
+      ]);
+
       setStatusText("Zeus è pronto");
     } catch (error) {
       console.error(error);
@@ -264,6 +305,9 @@ function App() {
           text:
             error?.message ||
             "Il server di Zeus non è raggiungibile in questo momento.",
+          grounded: false,
+          searchQueries: [],
+          sources: [],
         },
       ]);
 
@@ -403,7 +447,7 @@ function App() {
               <div>
                 <div className="chat-title">Conversazione</div>
                 <div className="chat-subtitle">
-                  Chat personale con memoria strutturata e logica ibrida
+                  Chat personale con memoria strutturata, logica ibrida e ricerca web
                 </div>
               </div>
             </div>
@@ -419,6 +463,28 @@ function App() {
                   <div className={`message ${message.sender}`}>
                     <strong>{message.sender === "zeus" ? "Zeus" : "Tu"}</strong>
                     <p>{message.text}</p>
+
+                    {message.grounded && (
+                      <div className="message-badge">Risposta verificata sul web</div>
+                    )}
+
+                    {message.sources?.length > 0 && (
+                      <div className="message-sources">
+                        <div className="message-sources-title">Fonti</div>
+
+                        {message.sources.map((source, sourceIndex) => (
+                          <a
+                            key={`${source.url}-${sourceIndex}`}
+                            className="message-source-link"
+                            href={source.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {source.title || source.url}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
