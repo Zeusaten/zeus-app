@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./styles.css";
@@ -9,10 +15,18 @@ import {
   extractProfileUpdates,
   getDeterministicReply,
 } from "./services/zeusCore";
+import {
+  createCanvaDesign,
+  createCanvaExport,
+  getCanvaStatus,
+  pollCanvaExport,
+  startCanvaConnect,
+} from "./services/canvaApi";
 
 const STORAGE_CONVERSATIONS = "zeus_conversations";
 const STORAGE_ACTIVE_CONVERSATION = "zeus_active_conversation";
 const STORAGE_PROFILE = "zeus_profile";
+const STORAGE_CANVA_LAST_DESIGN = "zeus_canva_last_design";
 
 function createId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -194,6 +208,28 @@ function App() {
     return DEFAULT_PROFILE;
   });
 
+  const [canvaStatus, setCanvaStatus] = useState({
+    connected: false,
+    expiresAt: null,
+    scopes: null,
+  });
+
+  const [canvaBusy, setCanvaBusy] = useState(false);
+  const [canvaNotice, setCanvaNotice] = useState("");
+  const [canvaDesign, setCanvaDesign] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_CANVA_LAST_DESIGN);
+
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
+  });
+
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [statusText, setStatusText] = useState("Sto preparando Zeus...");
@@ -226,6 +262,24 @@ function App() {
     return getStatusLabel(statusText, isLoading);
   }, [statusText, isLoading]);
 
+  const refreshCanvaStatus = useCallback(async () => {
+    try {
+      const data = await getCanvaStatus();
+      setCanvaStatus({
+        connected: Boolean(data?.connected),
+        expiresAt: data?.expiresAt || null,
+        scopes: data?.scopes || null,
+      });
+    } catch (error) {
+      console.error(error);
+      setCanvaStatus({
+        connected: false,
+        expiresAt: null,
+        scopes: null,
+      });
+    }
+  }, []);
+
   useEffect(() => {
     localStorage.setItem(STORAGE_CONVERSATIONS, JSON.stringify(conversations));
   }, [conversations]);
@@ -241,6 +295,17 @@ function App() {
   }, [profile]);
 
   useEffect(() => {
+    if (canvaDesign) {
+      localStorage.setItem(
+        STORAGE_CANVA_LAST_DESIGN,
+        JSON.stringify(canvaDesign)
+      );
+    } else {
+      localStorage.removeItem(STORAGE_CANVA_LAST_DESIGN);
+    }
+  }, [canvaDesign]);
+
+  useEffect(() => {
     const initZeus = async () => {
       try {
         await loadZeusEngine(setStatusText);
@@ -254,7 +319,25 @@ function App() {
     };
 
     initZeus();
-  }, []);
+    refreshCanvaStatus();
+  }, [refreshCanvaStatus]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const canvaConnected = params.get("canva");
+    const canvaError = params.get("canva_error");
+
+    if (canvaConnected === "connected") {
+      setCanvaNotice("Canva collegato con successo.");
+      refreshCanvaStatus();
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    if (canvaError) {
+      setCanvaNotice(decodeURIComponent(canvaError));
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [refreshCanvaStatus]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -327,6 +410,86 @@ function App() {
 
     localStorage.removeItem(STORAGE_PROFILE);
     setProfile(DEFAULT_PROFILE);
+  }
+
+  async function handleCreateInstagramDesign() {
+    try {
+      setCanvaBusy(true);
+      setCanvaNotice("");
+
+      const data = await createCanvaDesign({
+        title: `Post Instagram Zeus ${new Date().toLocaleDateString("it-IT")}`,
+        width: 1080,
+        height: 1350,
+      });
+
+      const design = data?.design || null;
+
+      if (!design) {
+        throw new Error("Design Canva non creato");
+      }
+
+      setCanvaDesign(design);
+      setCanvaNotice("Design Canva creato con successo.");
+
+      if (design?.urls?.edit_url) {
+        window.open(design.urls.edit_url, "_blank");
+      }
+    } catch (error) {
+      console.error(error);
+      setCanvaNotice(error?.message || "Errore creazione design Canva");
+    } finally {
+      setCanvaBusy(false);
+    }
+  }
+
+  function handleOpenCanvaDesign() {
+    if (!canvaDesign?.urls?.edit_url) {
+      setCanvaNotice("Nessun design Canva apribile trovato.");
+      return;
+    }
+
+    window.open(canvaDesign.urls.edit_url, "_blank");
+  }
+
+  async function handleExportLastDesign() {
+    if (!canvaDesign?.id) {
+      setCanvaNotice("Nessun design Canva disponibile da esportare.");
+      return;
+    }
+
+    try {
+      setCanvaBusy(true);
+      setCanvaNotice("Export PNG in corso...");
+
+      const start = await createCanvaExport(canvaDesign.id, "png");
+      const exportId = start?.job?.id;
+
+      if (!exportId) {
+        throw new Error("Export Canva non avviato");
+      }
+
+      const result = await pollCanvaExport(exportId, {
+        intervalMs: 2000,
+        maxAttempts: 30,
+      });
+
+      const downloadUrl =
+        result?.job?.urls?.[0] ||
+        result?.job?.download_url ||
+        result?.job?.result?.url;
+
+      setCanvaNotice("Export PNG pronto.");
+
+      if (downloadUrl) {
+        window.open(downloadUrl, "_blank");
+      }
+    } catch (error) {
+      console.error(error);
+      setCanvaNotice(error?.message || "Errore export Canva");
+    } finally {
+      setCanvaBusy(false);
+    }
   }
 
   const handleSend = async (e) => {
@@ -478,6 +641,74 @@ function App() {
           </div>
         </div>
 
+        <div className="sidebar-card">
+          <div className="sidebar-card-label">Canva</div>
+
+          <div className="canva-status-row">
+            <span
+              className={`canva-dot ${
+                canvaStatus.connected ? "connected" : "disconnected"
+              }`}
+            ></span>
+            <span className="canva-status-text">
+              {canvaStatus.connected ? "Canva collegato" : "Canva non collegato"}
+            </span>
+          </div>
+
+          {canvaDesign && (
+            <div className="canva-design-box">
+              <div className="canva-design-title">
+                {canvaDesign.title || "Ultimo design Canva"}
+              </div>
+              <div className="canva-design-id">ID: {canvaDesign.id}</div>
+            </div>
+          )}
+
+          {canvaNotice && <div className="canva-note">{canvaNotice}</div>}
+
+          <div className="canva-actions">
+            {!canvaStatus.connected ? (
+              <button
+                type="button"
+                className="canva-primary-button"
+                onClick={startCanvaConnect}
+                disabled={canvaBusy}
+              >
+                Collega Canva
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="canva-primary-button"
+                  onClick={handleCreateInstagramDesign}
+                  disabled={canvaBusy}
+                >
+                  {canvaBusy ? "Attendi..." : "Crea post IG"}
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleOpenCanvaDesign}
+                  disabled={canvaBusy || !canvaDesign?.urls?.edit_url}
+                >
+                  Apri ultimo design
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleExportLastDesign}
+                  disabled={canvaBusy || !canvaDesign?.id}
+                >
+                  Esporta PNG
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
         <div className="sidebar-card conversations-card">
           <div className="sidebar-card-label">Conversazioni</div>
 
@@ -523,7 +754,7 @@ function App() {
             type="button"
             onClick={resetMemory}
           >
-            Reset memoria
+            Azzera memoria di Zeus
           </button>
         </div>
       </aside>
