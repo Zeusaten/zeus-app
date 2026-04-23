@@ -14,7 +14,6 @@
   --accent-a: #5d70ff;
   --accent-b: #7a5cff;
   --accent-c: #5ec2ff;
-  --accent-soft: rgba(93, 112, 255, 0.1);
   --success-bg: rgba(20, 184, 111, 0.12);
   --success-border: rgba(20, 184, 111, 0.24);
   --success-text: #0a8f61;
@@ -61,7 +60,6 @@ a {
 .app-shell {
   min-height: 100vh;
   display: flex;
-  gap: 0;
 }
 
 .sidebar {
@@ -222,7 +220,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 0;
+  min-height: 120px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -231,6 +229,7 @@ a {
   display: flex;
   align-items: stretch;
   gap: 8px;
+  min-height: 82px;
   border-radius: 18px;
   background: rgba(248, 250, 255, 0.94);
   border: 1px solid rgba(99, 116, 255, 0.08);
@@ -249,6 +248,8 @@ a {
 
 .conversation-main {
   flex: 1;
+  display: block;
+  width: 100%;
   min-width: 0;
   border: none;
   background: transparent;
@@ -258,6 +259,7 @@ a {
 }
 
 .conversation-item-title {
+  display: block;
   font-size: 15px;
   font-weight: 700;
   color: #1d2742;
@@ -267,6 +269,7 @@ a {
 }
 
 .conversation-item-preview {
+  display: block;
   margin-top: 6px;
   color: var(--muted);
   font-size: 13px;
@@ -277,6 +280,7 @@ a {
 }
 
 .conversation-delete {
+  flex: 0 0 34px;
   align-self: center;
   margin-right: 10px;
   width: 34px;

@@ -48,10 +48,45 @@ function getConversationTitle(text) {
   const clean = text.replace(/\s+/g, " ").trim();
 
   if (!clean) return "Nuova chat";
-
   if (clean.length <= 38) return clean;
 
   return `${clean.slice(0, 38).trim()}...`;
+}
+
+function normalizeMessage(message) {
+  if (!message || typeof message !== "object") return null;
+
+  return {
+    sender: message.sender === "user" ? "user" : "zeus",
+    text: typeof message.text === "string" ? message.text : "",
+    grounded: Boolean(message.grounded),
+    searchQueries: Array.isArray(message.searchQueries)
+      ? message.searchQueries
+      : [],
+    sources: Array.isArray(message.sources) ? message.sources : [],
+  };
+}
+
+function normalizeConversation(raw) {
+  if (!raw || typeof raw !== "object") return null;
+
+  const normalizedMessages = Array.isArray(raw.messages)
+    ? raw.messages.map(normalizeMessage).filter(Boolean)
+    : [];
+
+  return {
+    id: typeof raw.id === "string" && raw.id ? raw.id : createId(),
+    title:
+      typeof raw.title === "string" && raw.title.trim()
+        ? raw.title.trim()
+        : "Nuova chat",
+    createdAt: typeof raw.createdAt === "number" ? raw.createdAt : Date.now(),
+    updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : Date.now(),
+    messages:
+      normalizedMessages.length > 0
+        ? normalizedMessages
+        : [createWelcomeMessage()],
+  };
 }
 
 function normalizeAssistantPayload(payload) {
@@ -97,6 +132,24 @@ function ZeusLogo() {
   );
 }
 
+function getStatusLabel(statusText, isLoading) {
+  const lower = statusText.toLowerCase();
+
+  if (isLoading) return "Zeus sta scrivendo...";
+  if (lower.includes("pronto")) return "Zeus è pronto";
+  if (
+    lower.includes("riattivando") ||
+    lower.includes("risvegliando") ||
+    lower.includes("collegando") ||
+    lower.includes("lento")
+  ) {
+    return "Zeus si sta risvegliando...";
+  }
+  if (lower.includes("connessione")) return "Connessione a Zeus non riuscita";
+
+  return statusText;
+}
+
 function App() {
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem(STORAGE_CONVERSATIONS);
@@ -104,8 +157,14 @@ function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const normalized = parsed
+            .map(normalizeConversation)
+            .filter(Boolean)
+            .sort((a, b) => b.updatedAt - a.updatedAt);
+
+          if (normalized.length > 0) return normalized;
         }
       } catch {
         // ignore
@@ -160,6 +219,10 @@ function App() {
   const creatorName = useMemo(() => {
     return profile.creatorName || null;
   }, [profile.creatorName]);
+
+  const statusLabel = useMemo(() => {
+    return getStatusLabel(statusText, isLoading);
+  }, [statusText, isLoading]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_CONVERSATIONS, JSON.stringify(conversations));
@@ -222,7 +285,6 @@ function App() {
 
   function createNewChat() {
     const newConversation = createConversation();
-
     setConversations((prev) => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
     setInput("");
@@ -285,9 +347,12 @@ function App() {
     }
 
     patchConversation(conversationId, (conv) => {
+      const userMessagesCount = conv.messages.filter(
+        (msg) => msg.sender === "user"
+      ).length;
+
       const shouldRename =
-        conv.title === "Nuova chat" ||
-        conv.messages.filter((msg) => msg.sender === "user").length === 0;
+        conv.title === "Nuova chat" || userMessagesCount === 0;
 
       return {
         ...conv,
@@ -395,7 +460,7 @@ function App() {
 
         <div className="sidebar-card">
           <div className="sidebar-card-label">Stato</div>
-          <div className="status-pill">{statusText}</div>
+          <div className="status-pill">{statusLabel}</div>
         </div>
 
         <div className="sidebar-card">
