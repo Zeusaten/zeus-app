@@ -26,13 +26,16 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isRetryableGeminiError(error) {
-  const rawMessage =
+function getErrorText(error) {
+  return String(
     error?.message ||
-    error?.error?.message ||
-    JSON.stringify(error || "");
+      error?.error?.message ||
+      JSON.stringify(error || "")
+  ).toLowerCase();
+}
 
-  const message = String(rawMessage).toLowerCase();
+function isRetryableGeminiError(error) {
+  const message = getErrorText(error);
 
   const status =
     error?.status ||
@@ -48,6 +51,27 @@ function isRetryableGeminiError(error) {
     message.includes("high demand") ||
     message.includes("unavailable") ||
     message.includes("temporarily unavailable")
+  );
+}
+
+function shouldFallbackWithoutSearch(error) {
+  const message = getErrorText(error);
+
+  const status =
+    error?.status ||
+    error?.code ||
+    error?.error?.code ||
+    null;
+
+  return (
+    status === 400 ||
+    status === "400" ||
+    message.includes("invalid argument") ||
+    message.includes("unsupported") ||
+    message.includes("google search") ||
+    message.includes("google_search") ||
+    message.includes("tool") ||
+    message.includes("grounding")
   );
 }
 
@@ -114,8 +138,8 @@ Non inventare fatti.
 Se non sei sicuro, dillo chiaramente.
 Evita risposte vaghe o confuse.
 
-Quando l'utente fa domande attuali, verificabili, recenti, o che richiedono fonti, usa la ricerca Google.
-Se la ricerca web è stata usata, scrivi una risposta chiara e sintetica, poi appoggiati alle fonti emerse.
+Quando l'utente fa domande attuali, verificabili, recenti, o che richiedono fonti, prova a usare la ricerca web se disponibile.
+Se la ricerca web non è disponibile, rispondi comunque nel miglior modo possibile senza bloccarti.
 Se l'utente chiede di riscrivere, rimandare o rifare un testo, restituisci il testo completo.
 Non interrompere mai la risposta a metà.
 Non lasciare parole tagliate.
@@ -284,14 +308,18 @@ Se l'utente chiede un prompt per immagini o video, rispondi così:
 
 function extractGrounding(response) {
   const metadata = response?.candidates?.[0]?.groundingMetadata || {};
-  const rawChunks = metadata.groundingChunks || [];
-  const rawQueries = metadata.webSearchQueries || [];
+  const rawChunks = Array.isArray(metadata.groundingChunks)
+    ? metadata.groundingChunks
+    : [];
+  const rawQueries = Array.isArray(metadata.webSearchQueries)
+    ? metadata.webSearchQueries
+    : [];
 
   const unique = new Map();
 
   for (const chunk of rawChunks) {
     const web = chunk?.web;
-    if (!web?.uri) continue;
+    if (!web || !web.uri) continue;
 
     if (!unique.has(web.uri)) {
       unique.set(web.uri, {
@@ -308,24 +336,48 @@ function extractGrounding(response) {
   };
 }
 
+async function generateGeminiResponse(
+  currentModel,
+  prompt,
+  maxOutputTokens,
+  useSearch
+) {
+  return ai.models.generateContent({
+    model: currentModel,
+    contents: prompt,
+    config: {
+      temperature: 0.25,
+      maxOutputTokens,
+      ...(useSearch ? { tools: [{ googleSearch: {} }] } : {}),
+    },
+  });
+}
+
 async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
   const modelsToTry = [model, fallbackModel].filter(Boolean);
   let lastError = null;
 
   for (const currentModel of modelsToTry) {
+    let mustRetryWithoutSearch = false;
+
     for (let attempt = 0; attempt < 4; attempt += 1) {
       try {
-        return await ai.models.generateContent({
-          model: currentModel,
-          contents: prompt,
-          config: {
-            temperature: 0.25,
-            maxOutputTokens,
-            tools: [{ googleSearch: {} }],
-          },
-        });
+        return await generateGeminiResponse(
+          currentModel,
+          prompt,
+          maxOutputTokens,
+          true
+        );
       } catch (error) {
         lastError = error;
+
+        if (shouldFallbackWithoutSearch(error)) {
+          console.warn(
+            `Ricerca web non disponibile sul modello ${currentModel}, provo senza ricerca.`
+          );
+          mustRetryWithoutSearch = true;
+          break;
+        }
 
         if (!isRetryableGeminiError(error)) {
           throw error;
@@ -333,9 +385,34 @@ async function callGeminiWithRetry(prompt, maxOutputTokens = 1200) {
 
         const waitMs = 3000 * (attempt + 1);
         console.warn(
-          `Modello ${currentModel} occupato, tentativo ${attempt + 1}/4. Attendo ${waitMs}ms`
+          `Modello ${currentModel} occupato con ricerca web, tentativo ${attempt + 1}/4. Attendo ${waitMs}ms`
         );
         await sleep(waitMs);
+      }
+    }
+
+    if (mustRetryWithoutSearch || lastError) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          return await generateGeminiResponse(
+            currentModel,
+            prompt,
+            maxOutputTokens,
+            false
+          );
+        } catch (error) {
+          lastError = error;
+
+          if (!isRetryableGeminiError(error)) {
+            throw error;
+          }
+
+          const waitMs = 3000 * (attempt + 1);
+          console.warn(
+            `Modello ${currentModel} occupato senza ricerca, tentativo ${attempt + 1}/4. Attendo ${waitMs}ms`
+          );
+          await sleep(waitMs);
+        }
       }
     }
   }
