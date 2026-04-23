@@ -137,6 +137,7 @@ function getStatusLabel(statusText, isLoading) {
 
   if (isLoading) return "Zeus sta scrivendo...";
   if (lower.includes("pronto")) return "Zeus è pronto";
+
   if (
     lower.includes("riattivando") ||
     lower.includes("risvegliando") ||
@@ -145,6 +146,7 @@ function getStatusLabel(statusText, isLoading) {
   ) {
     return "Zeus si sta risvegliando...";
   }
+
   if (lower.includes("connessione")) return "Connessione a Zeus non riuscita";
 
   return statusText;
@@ -245,7 +247,9 @@ function App() {
         setStatusText("Zeus è pronto");
       } catch (error) {
         console.error(error);
-        setStatusText("Server Zeus temporaneamente lento. Puoi riprovare tra poco.");
+        setStatusText(
+          "Server Zeus temporaneamente lento. Puoi riprovare tra poco."
+        );
       }
     };
 
@@ -454,7 +458,11 @@ function App() {
           </button>
         </div>
 
-        <button className="new-chat-button" type="button" onClick={createNewChat}>
+        <button
+          className="new-chat-button"
+          type="button"
+          onClick={createNewChat}
+        >
           + Nuova chat
         </button>
 
@@ -470,7 +478,7 @@ function App() {
           </div>
         </div>
 
-        <div className="sidebar-card grow">
+        <div className="sidebar-card conversations-card">
           <div className="sidebar-card-label">Conversazioni</div>
 
           <div className="conversation-list">
@@ -508,9 +516,13 @@ function App() {
           </div>
         </div>
 
-        <div className="sidebar-card">
+        <div className="sidebar-card memory-card">
           <div className="sidebar-card-label">Memoria</div>
-          <button className="secondary-button" type="button" onClick={resetMemory}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={resetMemory}
+          >
             Reset memoria
           </button>
         </div>
