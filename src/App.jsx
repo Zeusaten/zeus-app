@@ -323,20 +323,19 @@ function App() {
   }, [refreshCanvaStatus]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const canvaConnected = params.get("canva");
-    const canvaError = params.get("canva_error");
+    function handleMessage(event) {
+      if (event?.data?.type === "CANVA_CONNECTED") {
+        refreshCanvaStatus();
+        setCanvaNotice("Canva collegato con successo.");
+      }
 
-    if (canvaConnected === "connected") {
-      setCanvaNotice("Canva collegato con successo.");
-      refreshCanvaStatus();
-      window.history.replaceState({}, "", window.location.pathname);
+      if (event?.data?.type === "CANVA_ERROR") {
+        setCanvaNotice(event?.data?.message || "Errore collegamento Canva");
+      }
     }
 
-    if (canvaError) {
-      setCanvaNotice(decodeURIComponent(canvaError));
-      window.history.replaceState({}, "", window.location.pathname);
-    }
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, [refreshCanvaStatus]);
 
   useEffect(() => {
@@ -671,7 +670,18 @@ function App() {
               <button
                 type="button"
                 className="canva-primary-button"
-                onClick={startCanvaConnect}
+                onClick={() => {
+                  try {
+                    setCanvaNotice("Apro Canva in una finestra separata...");
+                    startCanvaConnect(async () => {
+                      await refreshCanvaStatus();
+                    });
+                  } catch (error) {
+                    setCanvaNotice(
+                      error?.message || "Errore apertura popup Canva"
+                    );
+                  }
+                }}
                 disabled={canvaBusy}
               >
                 Collega Canva

@@ -7,9 +7,8 @@ const CANVA_API_BASE = "https://api.canva.com/rest/v1";
 const pendingAuth = new Map();
 
 /**
- * Demo/single-user storage.
- * Su Render non è persistente: se il servizio riparte, perdi il token.
- * Per partire va bene, poi lo spostiamo su DB o file sicuro.
+ * Demo storage in memoria.
+ * Su Render free può perdersi dopo riavvii/sleep.
  */
 let canvaSession = {
   tokens: null,
@@ -46,7 +45,9 @@ function createState() {
 function getBasicAuthHeader() {
   const clientId = getRequiredEnv("CANVA_CLIENT_ID");
   const clientSecret = getRequiredEnv("CANVA_CLIENT_SECRET");
-  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString(
+    "base64"
+  );
   return `Basic ${credentials}`;
 }
 
@@ -163,7 +164,7 @@ export function registerCanvaRoutes(app) {
     });
   });
 
-  app.get("/api/canva/connect/start", (req, res) => {
+  app.get("/api/canva/connect/start", (_req, res) => {
     try {
       const clientId = getRequiredEnv("CANVA_CLIENT_ID");
       const redirectUri = getRequiredEnv("CANVA_REDIRECT_URI");
@@ -203,7 +204,9 @@ export function registerCanvaRoutes(app) {
 
       if (error) {
         throw new Error(
-          `Canva OAuth error: ${error_description || error || "errore sconosciuto"}`
+          `Canva OAuth error: ${
+            error_description || error || "errore sconosciuto"
+          }`
         );
       }
 
@@ -220,6 +223,7 @@ export function registerCanvaRoutes(app) {
       pendingAuth.delete(state);
 
       const redirectUri = getRequiredEnv("CANVA_REDIRECT_URI");
+
       const tokens = await exchangeAuthorizationCode({
         code: String(code),
         codeVerifier: saved.codeVerifier,
@@ -228,14 +232,98 @@ export function registerCanvaRoutes(app) {
 
       canvaSession.tokens = tokens;
 
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-      res.redirect(`${frontendUrl}?canva=connected`);
+      res.send(`
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <title>Canva collegato</title>
+    <style>
+      body {
+        font-family: Inter, Arial, sans-serif;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f7f9ff;
+        color: #1a223b;
+      }
+      .box {
+        padding: 24px 28px;
+        border-radius: 18px;
+        background: white;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h2>Canva collegato</h2>
+      <p>Puoi tornare a Zeus. Questa finestra si chiuderà da sola.</p>
+    </div>
+    <script>
+      try {
+        if (window.opener) {
+          window.opener.postMessage({ type: "CANVA_CONNECTED" }, "*");
+        }
+      } catch (e) {}
+      setTimeout(() => window.close(), 700);
+    </script>
+  </body>
+</html>
+      `);
     } catch (error) {
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-      const message = encodeURIComponent(
+      const safeMessage = String(
         error?.message || "Errore callback Canva"
-      );
-      res.redirect(`${frontendUrl}?canva_error=${message}`);
+      )
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      res.status(500).send(`
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <title>Errore Canva</title>
+    <style>
+      body {
+        font-family: Inter, Arial, sans-serif;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #fff8f8;
+        color: #7a1f1f;
+      }
+      .box {
+        padding: 24px 28px;
+        border-radius: 18px;
+        background: white;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        text-align: center;
+        max-width: 520px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h2>Errore collegamento Canva</h2>
+      <p>${safeMessage}</p>
+    </div>
+    <script>
+      try {
+        if (window.opener) {
+          window.opener.postMessage(
+            { type: "CANVA_ERROR", message: ${JSON.stringify(safeMessage)} },
+            "*"
+          );
+        }
+      } catch (e) {}
+    </script>
+  </body>
+</html>
+      `);
     }
   });
 
