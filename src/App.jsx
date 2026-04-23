@@ -188,6 +188,42 @@ function convertToPx(value, unit) {
   return Math.round(numeric);
 }
 
+function parsePagesInput(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return undefined;
+
+  const parts = raw.split(",").map((part) => part.trim()).filter(Boolean);
+  const pages = new Set();
+
+  for (const part of parts) {
+    if (part.includes("-")) {
+      const [startRaw, endRaw] = part.split("-").map((v) => Number(v.trim()));
+      if (
+        Number.isInteger(startRaw) &&
+        Number.isInteger(endRaw) &&
+        startRaw > 0 &&
+        endRaw >= startRaw
+      ) {
+        for (let i = startRaw; i <= endRaw; i += 1) {
+          pages.add(i);
+        }
+      }
+    } else {
+      const page = Number(part);
+      if (Number.isInteger(page) && page > 0) {
+        pages.add(page);
+      }
+    }
+  }
+
+  return pages.size ? Array.from(pages) : undefined;
+}
+
+function openUrls(urls = []) {
+  const clean = urls.filter(Boolean);
+  clean.forEach((url) => window.open(url, "_blank"));
+}
+
 function App() {
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem(STORAGE_CONVERSATIONS);
@@ -250,9 +286,22 @@ function App() {
 
     return null;
   });
-  const [canvaWidth, setCanvaWidth] = useState("1080");
-  const [canvaHeight, setCanvaHeight] = useState("1350");
-  const [canvaUnit, setCanvaUnit] = useState("px");
+
+  const [designWidth, setDesignWidth] = useState("1080");
+  const [designHeight, setDesignHeight] = useState("1350");
+  const [designUnit, setDesignUnit] = useState("px");
+
+  const [exportFormat, setExportFormat] = useState("png");
+  const [exportPages, setExportPages] = useState("");
+  const [exportQuality, setExportQuality] = useState("regular");
+  const [exportWidth, setExportWidth] = useState("");
+  const [exportHeight, setExportHeight] = useState("");
+  const [jpgQuality, setJpgQuality] = useState("90");
+  const [pdfSize, setPdfSize] = useState("a4");
+  const [pngLossless, setPngLossless] = useState(true);
+  const [pngTransparent, setPngTransparent] = useState(false);
+  const [pngAsSingleImage, setPngAsSingleImage] = useState(false);
+  const [mp4Quality, setMp4Quality] = useState("horizontal_1080p");
 
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -435,9 +484,9 @@ function App() {
     setProfile(DEFAULT_PROFILE);
   }
 
-  async function handleCreateInstagramDesign() {
-    const widthPx = convertToPx(canvaWidth, canvaUnit);
-    const heightPx = convertToPx(canvaHeight, canvaUnit);
+  async function handleCreateDesign() {
+    const widthPx = convertToPx(designWidth, designUnit);
+    const heightPx = convertToPx(designHeight, designUnit);
 
     if (!widthPx || !heightPx) {
       setCanvaError("Inserisci dimensioni valide.");
@@ -483,7 +532,7 @@ function App() {
     window.open(canvaDesign.urls.edit_url, "_blank");
   }
 
-  async function handleExportLastDesign() {
+  async function handleExport() {
     if (!canvaDesign?.id) {
       setCanvaError("Nessun design Canva da esportare.");
       return;
@@ -493,7 +542,46 @@ function App() {
       setCanvaBusy(true);
       setCanvaError("");
 
-      const start = await createCanvaExport(canvaDesign.id, "png");
+      const pages = parsePagesInput(exportPages);
+      const options = {};
+
+      if (pages) {
+        options.pages = pages;
+      }
+
+      if (["pdf", "jpg", "png", "gif", "mp4"].includes(exportFormat)) {
+        options.exportQuality = exportQuality;
+      }
+
+      if (exportFormat === "pdf") {
+        options.size = pdfSize;
+      }
+
+      if (["jpg", "png", "gif"].includes(exportFormat)) {
+        if (exportWidth.trim()) options.width = Number(exportWidth);
+        if (exportHeight.trim()) options.height = Number(exportHeight);
+      }
+
+      if (exportFormat === "jpg") {
+        options.quality = Number(jpgQuality || 90);
+      }
+
+      if (exportFormat === "png") {
+        options.lossless = pngLossless;
+        options.transparentBackground = pngTransparent;
+        options.asSingleImage = pngAsSingleImage;
+      }
+
+      if (exportFormat === "mp4") {
+        options.quality = mp4Quality;
+      }
+
+      const start = await createCanvaExport({
+        designId: canvaDesign.id,
+        formatType: exportFormat,
+        options,
+      });
+
       const exportId = start?.job?.id;
 
       if (!exportId) {
@@ -502,17 +590,16 @@ function App() {
 
       const result = await pollCanvaExport(exportId, {
         intervalMs: 2000,
-        maxAttempts: 30,
+        maxAttempts: 40,
       });
 
-      const downloadUrl =
-        result?.job?.urls?.[0] ||
-        result?.job?.download_url ||
-        result?.job?.result?.url;
+      const urls = Array.isArray(result?.job?.urls) ? result.job.urls : [];
 
-      if (downloadUrl) {
-        window.open(downloadUrl, "_blank");
+      if (urls.length === 0) {
+        throw new Error("Export completato ma senza link di download");
       }
+
+      openUrls(urls);
     } catch (error) {
       console.error(error);
       setCanvaError(error?.message || "Errore export Canva");
@@ -684,79 +771,7 @@ function App() {
             </span>
           </div>
 
-          {canvaStatus.connected && (
-            <>
-              <div className="canva-dimensions">
-                <div className="canva-input-group">
-                  <label>Larghezza</label>
-                  <input
-                    className="canva-number-input"
-                    type="number"
-                    min="1"
-                    value={canvaWidth}
-                    onChange={(e) => setCanvaWidth(e.target.value)}
-                  />
-                </div>
-
-                <div className="canva-input-group">
-                  <label>Altezza</label>
-                  <input
-                    className="canva-number-input"
-                    type="number"
-                    min="1"
-                    value={canvaHeight}
-                    onChange={(e) => setCanvaHeight(e.target.value)}
-                  />
-                </div>
-
-                <div className="canva-input-group unit">
-                  <label>Unità</label>
-                  <select
-                    className="canva-unit-select"
-                    value={canvaUnit}
-                    onChange={(e) => setCanvaUnit(e.target.value)}
-                  >
-                    <option value="px">px</option>
-                    <option value="mm">mm</option>
-                    <option value="cm">cm</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="canva-actions">
-                <button
-                  type="button"
-                  className="canva-primary-button"
-                  onClick={handleCreateInstagramDesign}
-                  disabled={canvaBusy}
-                >
-                  {canvaBusy ? "Attendi..." : "Crea design"}
-                </button>
-
-                <div className="canva-toolbar">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={handleOpenCanvaDesign}
-                    disabled={canvaBusy || !canvaDesign?.urls?.edit_url}
-                  >
-                    Apri
-                  </button>
-
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={handleExportLastDesign}
-                    disabled={canvaBusy || !canvaDesign?.id}
-                  >
-                    PNG
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {!canvaStatus.connected && (
+          {!canvaStatus.connected ? (
             <div className="canva-actions">
               <button
                 type="button"
@@ -778,6 +793,234 @@ function App() {
                 Collega Canva
               </button>
             </div>
+          ) : (
+            <>
+              <div className="canva-section-title">Crea design</div>
+
+              <div className="canva-dimensions">
+                <div className="canva-input-group">
+                  <label>Larghezza</label>
+                  <input
+                    className="canva-number-input"
+                    type="number"
+                    min="1"
+                    value={designWidth}
+                    onChange={(e) => setDesignWidth(e.target.value)}
+                  />
+                </div>
+
+                <div className="canva-input-group">
+                  <label>Altezza</label>
+                  <input
+                    className="canva-number-input"
+                    type="number"
+                    min="1"
+                    value={designHeight}
+                    onChange={(e) => setDesignHeight(e.target.value)}
+                  />
+                </div>
+
+                <div className="canva-input-group unit">
+                  <label>Unità</label>
+                  <select
+                    className="canva-unit-select"
+                    value={designUnit}
+                    onChange={(e) => setDesignUnit(e.target.value)}
+                  >
+                    <option value="px">px</option>
+                    <option value="mm">mm</option>
+                    <option value="cm">cm</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="canva-actions">
+                <button
+                  type="button"
+                  className="canva-primary-button"
+                  onClick={handleCreateDesign}
+                  disabled={canvaBusy}
+                >
+                  {canvaBusy ? "Attendi..." : "Crea design"}
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleOpenCanvaDesign}
+                  disabled={canvaBusy || !canvaDesign?.urls?.edit_url}
+                >
+                  Apri ultimo design
+                </button>
+              </div>
+
+              <div className="canva-section-title export-top">Export</div>
+
+              <div className="canva-export-grid">
+                <div className="canva-input-group full">
+                  <label>Formato</label>
+                  <select
+                    className="canva-unit-select"
+                    value={exportFormat}
+                    onChange={(e) => setExportFormat(e.target.value)}
+                  >
+                    <option value="png">PNG</option>
+                    <option value="jpg">JPG</option>
+                    <option value="pdf">PDF</option>
+                    <option value="gif">GIF</option>
+                    <option value="pptx">PPTX</option>
+                    <option value="mp4">MP4</option>
+                    <option value="html_bundle">HTML bundle</option>
+                    <option value="html_standalone">HTML standalone</option>
+                  </select>
+                </div>
+
+                <div className="canva-input-group full">
+                  <label>Pagine</label>
+                  <input
+                    className="canva-number-input"
+                    type="text"
+                    placeholder="es. 1,3-5"
+                    value={exportPages}
+                    onChange={(e) => setExportPages(e.target.value)}
+                  />
+                </div>
+
+                {["pdf", "jpg", "png", "gif", "mp4"].includes(exportFormat) && (
+                  <div className="canva-input-group full">
+                    <label>Qualità export</label>
+                    <select
+                      className="canva-unit-select"
+                      value={exportQuality}
+                      onChange={(e) => setExportQuality(e.target.value)}
+                    >
+                      <option value="regular">regular</option>
+                      <option value="pro">pro</option>
+                    </select>
+                  </div>
+                )}
+
+                {exportFormat === "pdf" && (
+                  <div className="canva-input-group full">
+                    <label>Formato carta</label>
+                    <select
+                      className="canva-unit-select"
+                      value={pdfSize}
+                      onChange={(e) => setPdfSize(e.target.value)}
+                    >
+                      <option value="a4">A4</option>
+                      <option value="a3">A3</option>
+                      <option value="letter">Letter</option>
+                      <option value="legal">Legal</option>
+                    </select>
+                  </div>
+                )}
+
+                {["jpg", "png", "gif"].includes(exportFormat) && (
+                  <>
+                    <div className="canva-input-group">
+                      <label>Larghezza px</label>
+                      <input
+                        className="canva-number-input"
+                        type="number"
+                        min="40"
+                        value={exportWidth}
+                        onChange={(e) => setExportWidth(e.target.value)}
+                        placeholder="auto"
+                      />
+                    </div>
+
+                    <div className="canva-input-group">
+                      <label>Altezza px</label>
+                      <input
+                        className="canva-number-input"
+                        type="number"
+                        min="40"
+                        value={exportHeight}
+                        onChange={(e) => setExportHeight(e.target.value)}
+                        placeholder="auto"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {exportFormat === "jpg" && (
+                  <div className="canva-input-group full">
+                    <label>Compressione JPG</label>
+                    <input
+                      className="canva-number-input"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={jpgQuality}
+                      onChange={(e) => setJpgQuality(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {exportFormat === "png" && (
+                  <div className="canva-checks">
+                    <label className="canva-check">
+                      <input
+                        type="checkbox"
+                        checked={pngLossless}
+                        onChange={(e) => setPngLossless(e.target.checked)}
+                      />
+                      <span>Lossless</span>
+                    </label>
+
+                    <label className="canva-check">
+                      <input
+                        type="checkbox"
+                        checked={pngTransparent}
+                        onChange={(e) => setPngTransparent(e.target.checked)}
+                      />
+                      <span>Sfondo trasparente</span>
+                    </label>
+
+                    <label className="canva-check">
+                      <input
+                        type="checkbox"
+                        checked={pngAsSingleImage}
+                        onChange={(e) => setPngAsSingleImage(e.target.checked)}
+                      />
+                      <span>Unica immagine</span>
+                    </label>
+                  </div>
+                )}
+
+                {exportFormat === "mp4" && (
+                  <div className="canva-input-group full">
+                    <label>Preset video</label>
+                    <select
+                      className="canva-unit-select"
+                      value={mp4Quality}
+                      onChange={(e) => setMp4Quality(e.target.value)}
+                    >
+                      <option value="horizontal_480p">horizontal_480p</option>
+                      <option value="horizontal_720p">horizontal_720p</option>
+                      <option value="horizontal_1080p">horizontal_1080p</option>
+                      <option value="horizontal_4k">horizontal_4k</option>
+                      <option value="vertical_480p">vertical_480p</option>
+                      <option value="vertical_720p">vertical_720p</option>
+                      <option value="vertical_1080p">vertical_1080p</option>
+                      <option value="vertical_4k">vertical_4k</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="canva-actions">
+                <button
+                  type="button"
+                  className="canva-primary-button"
+                  onClick={handleExport}
+                  disabled={canvaBusy || !canvaDesign?.id}
+                >
+                  {canvaBusy ? "Export..." : "Esporta"}
+                </button>
+              </div>
+            </>
           )}
 
           {canvaError && <div className="canva-error">{canvaError}</div>}

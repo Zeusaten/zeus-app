@@ -51,6 +51,177 @@ function getBasicAuthHeader() {
   return `Basic ${credentials}`;
 }
 
+function toPositiveInt(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.round(n);
+}
+
+function normalizePages(pages) {
+  if (!Array.isArray(pages)) return undefined;
+
+  const normalized = pages
+    .map((page) => Number(page))
+    .filter((page) => Number.isInteger(page) && page > 0);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function buildExportFormat(formatType, rawOptions = {}) {
+  const type = String(formatType || "").trim();
+
+  if (!type) {
+    throw new Error("formatType mancante");
+  }
+
+  const pages = normalizePages(rawOptions.pages);
+  const exportQuality =
+    rawOptions.exportQuality === "pro" ? "pro" : "regular";
+
+  switch (type) {
+    case "pdf": {
+      const format = {
+        type: "pdf",
+        export_quality: exportQuality,
+      };
+
+      if (["a4", "a3", "letter", "legal"].includes(rawOptions.size)) {
+        format.size = rawOptions.size;
+      }
+
+      if (pages) {
+        format.pages = pages;
+      }
+
+      return format;
+    }
+
+    case "jpg": {
+      const format = {
+        type: "jpg",
+        quality: Math.min(
+          100,
+          Math.max(1, Number(rawOptions.quality || 90))
+        ),
+        export_quality: exportQuality,
+      };
+
+      const width = toPositiveInt(rawOptions.width);
+      const height = toPositiveInt(rawOptions.height);
+
+      if (width) format.width = width;
+      if (height) format.height = height;
+      if (pages) format.pages = pages;
+
+      return format;
+    }
+
+    case "png": {
+      const format = {
+        type: "png",
+        export_quality: exportQuality,
+        lossless:
+          typeof rawOptions.lossless === "boolean"
+            ? rawOptions.lossless
+            : true,
+        transparent_background: Boolean(rawOptions.transparentBackground),
+        as_single_image: Boolean(rawOptions.asSingleImage),
+      };
+
+      const width = toPositiveInt(rawOptions.width);
+      const height = toPositiveInt(rawOptions.height);
+
+      if (width) format.width = width;
+      if (height) format.height = height;
+      if (pages) format.pages = pages;
+
+      return format;
+    }
+
+    case "gif": {
+      const format = {
+        type: "gif",
+        export_quality: exportQuality,
+      };
+
+      const width = toPositiveInt(rawOptions.width);
+      const height = toPositiveInt(rawOptions.height);
+
+      if (width) format.width = width;
+      if (height) format.height = height;
+      if (pages) format.pages = pages;
+
+      return format;
+    }
+
+    case "pptx": {
+      const format = {
+        type: "pptx",
+      };
+
+      if (pages) {
+        format.pages = pages;
+      }
+
+      return format;
+    }
+
+    case "mp4": {
+      const allowedMp4Qualities = [
+        "horizontal_480p",
+        "horizontal_720p",
+        "horizontal_1080p",
+        "horizontal_4k",
+        "vertical_480p",
+        "vertical_720p",
+        "vertical_1080p",
+        "vertical_4k",
+      ];
+
+      const format = {
+        type: "mp4",
+        quality: allowedMp4Qualities.includes(rawOptions.quality)
+          ? rawOptions.quality
+          : "horizontal_1080p",
+        export_quality: exportQuality,
+      };
+
+      if (pages) {
+        format.pages = pages;
+      }
+
+      return format;
+    }
+
+    case "html_bundle": {
+      const format = {
+        type: "html_bundle",
+      };
+
+      if (pages?.length) {
+        format.pages = [pages[0]];
+      }
+
+      return format;
+    }
+
+    case "html_standalone": {
+      const format = {
+        type: "html_standalone",
+      };
+
+      if (pages?.length) {
+        format.pages = [pages[0]];
+      }
+
+      return format;
+    }
+
+    default:
+      throw new Error(`Formato Canva non supportato: ${type}`);
+  }
+}
+
 async function exchangeAuthorizationCode({ code, codeVerifier, redirectUri }) {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -372,17 +543,19 @@ export function registerCanvaRoutes(app) {
 
   app.post("/api/canva/exports/create", async (req, res) => {
     try {
-      const { designId, format = "png" } = req.body || {};
+      const { designId, formatType, options = {} } = req.body || {};
 
       if (!designId) {
         return res.status(400).json({ error: "designId mancante" });
       }
 
+      if (!formatType) {
+        return res.status(400).json({ error: "formatType mancante" });
+      }
+
       const payload = {
         design_id: designId,
-        format: {
-          type: format,
-        },
+        format: buildExportFormat(formatType, options),
       };
 
       const data = await canvaFetch("/exports", {

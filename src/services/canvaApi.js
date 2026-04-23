@@ -26,12 +26,31 @@ export async function getCanvaStatus() {
   });
 }
 
-export function startCanvaConnect() {
-  window.location.href = `${API_BASE}/api/canva/connect/start`;
+export function startCanvaConnect(onDone) {
+  const popup = window.open(
+    `${API_BASE}/api/canva/connect/start`,
+    "canva-connect",
+    "width=720,height=820,menubar=no,toolbar=no,location=yes,status=no,resizable=yes,scrollbars=yes"
+  );
+
+  if (!popup) {
+    throw new Error("Popup bloccato dal browser. Consenti i popup e riprova.");
+  }
+
+  const interval = setInterval(() => {
+    if (popup.closed) {
+      clearInterval(interval);
+      if (typeof onDone === "function") {
+        onDone();
+      }
+    }
+  }, 700);
+
+  return popup;
 }
 
 export async function createCanvaDesign({
-  title = "Post Instagram Zeus",
+  title = "Design Zeus",
   width = 1080,
   height = 1350,
 } = {}) {
@@ -45,12 +64,17 @@ export async function createCanvaDesign({
   });
 }
 
-export async function createCanvaExport(designId, format = "png") {
+export async function createCanvaExport({
+  designId,
+  formatType,
+  options = {},
+}) {
   return request("/api/canva/exports/create", {
     method: "POST",
     body: JSON.stringify({
       designId,
-      format,
+      formatType,
+      options,
     }),
   });
 }
@@ -78,7 +102,9 @@ export async function pollCanvaExport(
     }
 
     if (status === "failed") {
-      throw new Error("Export Canva fallito");
+      throw new Error(
+        data?.job?.error?.message || "Export Canva fallito"
+      );
     }
 
     await sleep(intervalMs);
