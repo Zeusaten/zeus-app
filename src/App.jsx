@@ -10,71 +10,48 @@ import {
   getDeterministicReply,
 } from "./services/zeusCore";
 
-const DEFAULT_MESSAGES = [
-  {
+const STORAGE_CONVERSATIONS = "zeus_conversations";
+const STORAGE_ACTIVE_CONVERSATION = "zeus_active_conversation";
+const STORAGE_PROFILE = "zeus_profile";
+
+function createId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createWelcomeMessage() {
+  return {
     sender: "zeus",
     text: "Ciao. Sono Zeus. Ti aiuto in italiano con idee, organizzazione, scrittura e ricerche online con fonti.",
     grounded: false,
     searchQueries: [],
     sources: [],
-  },
-];
-
-const QUICK_PROMPTS = [
-  "Chi ti ha creato?",
-  "Come mi chiamo?",
-  "Cerca online le ultime notizie su Gemini",
-  "Scrivimi una mail professionale",
-];
-
-function ZeusLogo() {
-  return (
-    <div className="zeus-logo">
-      <span>Z</span>
-    </div>
-  );
+  };
 }
 
-function getStatusMeta(statusText, isLoading) {
-  const lower = statusText.toLowerCase();
-
-  if (isLoading) {
-    return {
-      label: "Zeus sta scrivendo...",
-      className: "top-status loading",
-    };
-  }
-
-  if (lower.includes("pronto")) {
-    return {
-      label: "Zeus è pronto",
-      className: "top-status ready",
-    };
-  }
-
-  if (
-    lower.includes("riattivando") ||
-    lower.includes("risvegliando") ||
-    lower.includes("lento") ||
-    lower.includes("collegando")
-  ) {
-    return {
-      label: "Zeus si sta risvegliando...",
-      className: "top-status waking",
-    };
-  }
-
-  if (lower.includes("connessione")) {
-    return {
-      label: "Connessione non riuscita",
-      className: "top-status warning",
-    };
-  }
+function createConversation(title = "Nuova chat") {
+  const now = Date.now();
 
   return {
-    label: statusText,
-    className: "top-status waking",
+    id: createId(),
+    title,
+    createdAt: now,
+    updatedAt: now,
+    messages: [createWelcomeMessage()],
   };
+}
+
+function getConversationTitle(text) {
+  const clean = text.replace(/\s+/g, " ").trim();
+
+  if (!clean) return "Nuova chat";
+
+  if (clean.length <= 38) return clean;
+
+  return `${clean.slice(0, 38).trim()}...`;
 }
 
 function normalizeAssistantPayload(payload) {
@@ -112,23 +89,38 @@ function MarkdownMessage({ text }) {
   );
 }
 
-function App() {
-  const [messages, setMessages] = useState(() => {
-    const savedMessages = localStorage.getItem("zeus_messages");
+function ZeusLogo() {
+  return (
+    <div className="zeus-logo">
+      <div className="zeus-logo-core">Z</div>
+    </div>
+  );
+}
 
-    if (savedMessages) {
+function App() {
+  const [conversations, setConversations] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_CONVERSATIONS);
+
+    if (saved) {
       try {
-        return JSON.parse(savedMessages);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
       } catch {
-        return DEFAULT_MESSAGES;
+        // ignore
       }
     }
 
-    return DEFAULT_MESSAGES;
+    return [createConversation()];
+  });
+
+  const [activeConversationId, setActiveConversationId] = useState(() => {
+    return localStorage.getItem(STORAGE_ACTIVE_CONVERSATION) || null;
   });
 
   const [profile, setProfile] = useState(() => {
-    const savedProfile = localStorage.getItem("zeus_profile");
+    const savedProfile = localStorage.getItem(STORAGE_PROFILE);
 
     if (savedProfile) {
       try {
@@ -146,18 +138,42 @@ function App() {
   const [statusText, setStatusText] = useState("Sto preparando Zeus...");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const messagesEndRef = useRef(null);
 
-  const creatorName = useMemo(
-    () => profile.creatorName || null,
-    [profile.creatorName]
-  );
+  useEffect(() => {
+    if (!activeConversationId && conversations.length > 0) {
+      setActiveConversationId(conversations[0].id);
+    }
+  }, [activeConversationId, conversations]);
 
-  const statusMeta = useMemo(
-    () => getStatusMeta(statusText, isLoading),
-    [statusText, isLoading]
-  );
+  const currentConversation = useMemo(() => {
+    return (
+      conversations.find((conv) => conv.id === activeConversationId) ||
+      conversations[0] ||
+      null
+    );
+  }, [conversations, activeConversationId]);
+
+  const messages = currentConversation?.messages || [];
+
+  const creatorName = useMemo(() => {
+    return profile.creatorName || null;
+  }, [profile.creatorName]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_CONVERSATIONS, JSON.stringify(conversations));
+  }, [conversations]);
+
+  useEffect(() => {
+    if (activeConversationId) {
+      localStorage.setItem(STORAGE_ACTIVE_CONVERSATION, activeConversationId);
+    }
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_PROFILE, JSON.stringify(profile));
+  }, [profile]);
 
   useEffect(() => {
     const initZeus = async () => {
@@ -166,19 +182,7 @@ function App() {
         setStatusText("Zeus è pronto");
       } catch (error) {
         console.error(error);
-        setStatusText("Zeus si sta riattivando...");
-
-        setTimeout(async () => {
-          try {
-            await loadZeusEngine(setStatusText);
-            setStatusText("Zeus è pronto");
-          } catch (retryError) {
-            console.error(retryError);
-            setStatusText(
-              "Server Zeus temporaneamente lento. Puoi comunque riprovare tra poco."
-            );
-          }
-        }, 4000);
+        setStatusText("Server Zeus temporaneamente lento. Puoi riprovare tra poco.");
       }
     };
 
@@ -186,16 +190,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("zeus_messages", JSON.stringify(messages));
-  }, [messages]);
-
-  useEffect(() => {
-    localStorage.setItem("zeus_profile", JSON.stringify(profile));
-  }, [profile]);
-
-  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, activeConversationId]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -205,18 +201,82 @@ function App() {
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [input]);
 
+  function patchConversation(conversationId, updater) {
+    setConversations((prev) => {
+      const updated = prev.map((conv) => {
+        if (conv.id !== conversationId) return conv;
+        return updater(conv);
+      });
+
+      return [...updated].sort((a, b) => b.updatedAt - a.updatedAt);
+    });
+  }
+
+  function appendMessageToConversation(conversationId, message) {
+    patchConversation(conversationId, (conv) => ({
+      ...conv,
+      messages: [...conv.messages, message],
+      updatedAt: Date.now(),
+    }));
+  }
+
+  function createNewChat() {
+    const newConversation = createConversation();
+
+    setConversations((prev) => [newConversation, ...prev]);
+    setActiveConversationId(newConversation.id);
+    setInput("");
+  }
+
+  function deleteConversation(conversationId) {
+    const confirmed = window.confirm(
+      "Vuoi davvero eliminare questa conversazione?"
+    );
+
+    if (!confirmed) return;
+
+    setConversations((prev) => {
+      const filtered = prev.filter((conv) => conv.id !== conversationId);
+
+      if (filtered.length === 0) {
+        const fresh = createConversation();
+        setActiveConversationId(fresh.id);
+        return [fresh];
+      }
+
+      if (conversationId === activeConversationId) {
+        setActiveConversationId(filtered[0].id);
+      }
+
+      return filtered;
+    });
+  }
+
+  function resetMemory() {
+    const confirmed = window.confirm(
+      "Vuoi davvero azzerare la memoria di Zeus?"
+    );
+
+    if (!confirmed) return;
+
+    localStorage.removeItem(STORAGE_PROFILE);
+    setProfile(DEFAULT_PROFILE);
+  }
+
   const handleSend = async (e) => {
     e.preventDefault();
 
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !currentConversation) return;
 
     const userText = input.trim();
-    const newMessage = {
+    const conversationId = currentConversation.id;
+    const previousMessages = [...currentConversation.messages];
+
+    const userMessage = {
       sender: "user",
       text: userText,
     };
 
-    const previousMessages = [...messages];
     const updates = extractProfileUpdates(userText);
     const updatedProfile = applyProfileUpdates(profile, updates);
 
@@ -224,10 +284,22 @@ function App() {
       setProfile(updatedProfile);
     }
 
-    setMessages((prev) => [...prev, newMessage]);
+    patchConversation(conversationId, (conv) => {
+      const shouldRename =
+        conv.title === "Nuova chat" ||
+        conv.messages.filter((msg) => msg.sender === "user").length === 0;
+
+      return {
+        ...conv,
+        title: shouldRename ? getConversationTitle(userText) : conv.title,
+        messages: [...conv.messages, userMessage],
+        updatedAt: Date.now(),
+      };
+    });
+
     setInput("");
     setIsLoading(true);
-    setStatusText("Zeus sta pensando...");
+    setStatusText("Zeus sta scrivendo...");
 
     try {
       const deterministicReply = getDeterministicReply(
@@ -237,16 +309,14 @@ function App() {
       );
 
       if (deterministicReply) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            sender: "zeus",
-            text: deterministicReply,
-            grounded: false,
-            searchQueries: [],
-            sources: [],
-          },
-        ]);
+        appendMessageToConversation(conversationId, {
+          sender: "zeus",
+          text: deterministicReply,
+          grounded: false,
+          searchQueries: [],
+          sources: [],
+        });
+
         setStatusText("Zeus è pronto");
         return;
       }
@@ -260,198 +330,200 @@ function App() {
 
       const normalized = normalizeAssistantPayload(aiReply);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: "zeus",
-          text: normalized.text,
-          grounded: normalized.grounded,
-          searchQueries: normalized.searchQueries,
-          sources: normalized.sources,
-        },
-      ]);
+      appendMessageToConversation(conversationId, {
+        sender: "zeus",
+        text: normalized.text,
+        grounded: normalized.grounded,
+        searchQueries: normalized.searchQueries,
+        sources: normalized.sources,
+      });
 
       setStatusText("Zeus è pronto");
     } catch (error) {
       console.error(error);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: "zeus",
-          text:
-            error?.message ||
-            "Il server di Zeus non è raggiungibile in questo momento.",
-          grounded: false,
-          searchQueries: [],
-          sources: [],
-        },
-      ]);
+      appendMessageToConversation(conversationId, {
+        sender: "zeus",
+        text:
+          error?.message ||
+          "Il server di Zeus non è raggiungibile in questo momento.",
+        grounded: false,
+        searchQueries: [],
+        sources: [],
+      });
 
-      setStatusText("Connessione al server non riuscita");
+      setStatusText("Connessione a Zeus non riuscita");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleClearChat = () => {
-    localStorage.removeItem("zeus_messages");
-    setMessages(DEFAULT_MESSAGES);
-  };
-
-  const handleClearMemory = () => {
-    localStorage.removeItem("zeus_profile");
-    setProfile(DEFAULT_PROFILE);
-  };
-
-  const handleQuickPrompt = (prompt) => {
-    setInput(prompt);
-    textareaRef.current?.focus();
-  };
-
-  const handleKeyDown = (e) => {
+  function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+
       if (!isLoading && input.trim()) {
         handleSend(e);
       }
     }
-  };
+  }
 
   return (
-    <div className="chatgpt-shell">
-      <aside className={`left-panel ${sidebarOpen ? "open" : "closed"}`}>
-        <div className="left-panel-header">
-          <div className="brand-row">
+    <div className="app-shell">
+      <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
+        <div className="sidebar-top">
+          <div className="brand">
             <ZeusLogo />
-            <div>
+            <div className="brand-copy">
               <div className="brand-title">Zeus</div>
               <div className="brand-subtitle">AI personale</div>
             </div>
           </div>
 
           <button
-            type="button"
             className="sidebar-toggle"
+            type="button"
             onClick={() => setSidebarOpen((prev) => !prev)}
           >
             {sidebarOpen ? "Chiudi" : "Apri"}
           </button>
         </div>
 
-        <div className="left-panel-content">
-          <button type="button" className="new-chat-btn" onClick={handleClearChat}>
-            + Nuova chat
-          </button>
+        <button className="new-chat-button" type="button" onClick={createNewChat}>
+          + Nuova chat
+        </button>
 
-          <div className="side-block">
-            <div className="side-label">Stato</div>
-            <div className={statusMeta.className}>{statusMeta.label}</div>
+        <div className="sidebar-card">
+          <div className="sidebar-card-label">Stato</div>
+          <div className="status-pill">{statusText}</div>
+        </div>
+
+        <div className="sidebar-card">
+          <div className="sidebar-card-label">Creatore</div>
+          <div className="creator-box">
+            {creatorName || "Non ancora memorizzato"}
           </div>
+        </div>
 
-          <div className="side-block">
-            <div className="side-label">Creatore</div>
-            <div className="side-value">
-              {creatorName || "Non ancora memorizzato"}
-            </div>
-          </div>
+        <div className="sidebar-card grow">
+          <div className="sidebar-card-label">Conversazioni</div>
 
-          <div className="side-block">
-            <div className="side-label">Prompt rapidi</div>
-            <div className="quick-list">
-              {QUICK_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  className="quick-item"
-                  onClick={() => handleQuickPrompt(prompt)}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="side-block">
-            <div className="side-label">Memoria</div>
-            <div className="side-actions">
-              <button
-                type="button"
-                className="ghost-btn"
-                onClick={handleClearMemory}
+          <div className="conversation-list">
+            {conversations.map((conversation) => (
+              <div
+                key={conversation.id}
+                className={`conversation-item ${
+                  conversation.id === currentConversation?.id ? "active" : ""
+                }`}
               >
-                Reset memoria
-              </button>
-            </div>
+                <button
+                  type="button"
+                  className="conversation-main"
+                  onClick={() => setActiveConversationId(conversation.id)}
+                >
+                  <div className="conversation-item-title">
+                    {conversation.title}
+                  </div>
+                  <div className="conversation-item-preview">
+                    {conversation.messages[conversation.messages.length - 1]
+                      ?.text?.slice(0, 60) || "Conversazione vuota"}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="conversation-delete"
+                  onClick={() => deleteConversation(conversation.id)}
+                  title="Elimina conversazione"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
+        </div>
+
+        <div className="sidebar-card">
+          <div className="sidebar-card-label">Memoria</div>
+          <button className="secondary-button" type="button" onClick={resetMemory}>
+            Reset memoria
+          </button>
         </div>
       </aside>
 
-      <main className="conversation-shell">
-        <header className="conversation-topbar">
+      <main className="main-panel">
+        <header className="topbar">
           <button
             type="button"
-            className="mobile-sidebar-btn"
+            className="mobile-menu-button"
             onClick={() => setSidebarOpen((prev) => !prev)}
           >
             ☰
           </button>
 
-          <div className="conversation-title-wrap">
-            <div className="conversation-title">Zeus</div>
-            <div className="conversation-subtitle">
-              Chat personale con memoria, web search e fonti
+          <div>
+            <div className="topbar-title">
+              {currentConversation?.title || "Zeus"}
+            </div>
+            <div className="topbar-subtitle">
+              Chat personale con memoria, ricerca e fonti
             </div>
           </div>
         </header>
 
-        <section className="conversation-area">
-          <div className="conversation-inner">
+        <section className="chat-area">
+          <div className="chat-inner">
             {messages.map((message, index) => (
               <div
                 key={index}
-                className={`chat-row ${
+                className={`message-row ${
                   message.sender === "user" ? "user-row" : "assistant-row"
                 }`}
               >
                 {message.sender === "zeus" && (
-                  <div className="assistant-avatar">Z</div>
+                  <div className="assistant-avatar-wrap">
+                    <div className="assistant-avatar">Z</div>
+                  </div>
                 )}
 
                 <div
-                  className={`chat-message ${
+                  className={`message-bubble ${
                     message.sender === "user"
-                      ? "user-message"
-                      : "assistant-message"
+                      ? "user-bubble"
+                      : "assistant-bubble"
                   }`}
                 >
                   {message.sender === "zeus" ? (
                     <>
                       <div className="assistant-name">Zeus</div>
-                      <div className="markdown-body">
+
+                      <div className="assistant-markdown">
                         <MarkdownMessage text={message.text} />
                       </div>
 
                       {message.grounded && (
-                        <div className="message-badge">
+                        <div className="web-badge">
                           Risposta verificata sul web
                         </div>
                       )}
 
                       {message.sources?.length > 0 && (
-                        <div className="message-sources">
-                          <div className="message-sources-title">Fonti</div>
-                          {message.sources.map((source, sourceIndex) => (
-                            <a
-                              key={`${source.url}-${sourceIndex}`}
-                              className="message-source-link"
-                              href={source.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {source.title || source.url}
-                            </a>
-                          ))}
+                        <div className="sources-block">
+                          <div className="sources-title">Fonti</div>
+
+                          <div className="sources-list">
+                            {message.sources.map((source, sourceIndex) => (
+                              <a
+                                key={`${source.url}-${sourceIndex}`}
+                                href={source.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="source-link"
+                              >
+                                {source.title || source.url}
+                              </a>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </>
@@ -463,11 +535,14 @@ function App() {
             ))}
 
             {isLoading && (
-              <div className="chat-row assistant-row">
-                <div className="assistant-avatar">Z</div>
-                <div className="chat-message assistant-message">
+              <div className="message-row assistant-row">
+                <div className="assistant-avatar-wrap">
+                  <div className="assistant-avatar">Z</div>
+                </div>
+
+                <div className="message-bubble assistant-bubble">
                   <div className="assistant-name">Zeus</div>
-                  <div className="streaming-loader">
+                  <div className="typing-dots">
                     <span></span>
                     <span></span>
                     <span></span>
@@ -480,8 +555,8 @@ function App() {
           </div>
         </section>
 
-        <footer className="composer-shell">
-          <form className="composer-box" onSubmit={handleSend}>
+        <footer className="composer-wrap">
+          <form className="composer" onSubmit={handleSend}>
             <textarea
               ref={textareaRef}
               placeholder="Scrivi un messaggio a Zeus..."
@@ -490,9 +565,17 @@ function App() {
               onKeyDown={handleKeyDown}
               rows={1}
             />
-            <div className="composer-actions">
-              <div className="composer-hint">Invio per inviare · Shift+Invio per andare a capo</div>
-              <button type="submit" className="send-btn" disabled={isLoading || !input.trim()}>
+
+            <div className="composer-bottom">
+              <div className="composer-hint">
+                Invio per inviare · Shift+Invio per andare a capo
+              </div>
+
+              <button
+                className="send-button"
+                type="submit"
+                disabled={isLoading || !input.trim()}
+              >
                 Invia
               </button>
             </div>
