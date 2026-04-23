@@ -49,6 +49,74 @@ function ZeusAvatar() {
   );
 }
 
+function getStatusMeta(statusText, isLoading) {
+  const lower = statusText.toLowerCase();
+
+  if (isLoading) {
+    return {
+      label: "Zeus sta elaborando...",
+      toneClass: "status-pill thinking",
+      bannerTitle: "Zeus sta pensando",
+      bannerText: "Sto elaborando la richiesta e costruendo una risposta completa.",
+    };
+  }
+
+  if (lower.includes("pronto")) {
+    return {
+      label: "Zeus è pronto",
+      toneClass: "status-pill ready",
+      bannerTitle: "",
+      bannerText: "",
+    };
+  }
+
+  if (lower.includes("riattivando") || lower.includes("risvegliando")) {
+    return {
+      label: "Zeus si sta risvegliando...",
+      toneClass: "status-pill waking",
+      bannerTitle: "Sistema in riattivazione",
+      bannerText:
+        "Il server si sta riaccendendo. Succede quando resta inattivo per un po'.",
+    };
+  }
+
+  if (lower.includes("collegando")) {
+    return {
+      label: "Connessione a Zeus...",
+      toneClass: "status-pill waking",
+      bannerTitle: "Connessione in corso",
+      bannerText: "Sto collegando l'interfaccia al cervello di Zeus.",
+    };
+  }
+
+  if (lower.includes("lento")) {
+    return {
+      label: "Zeus si sta risvegliando...",
+      toneClass: "status-pill waking",
+      bannerTitle: "Zeus sta tornando online",
+      bannerText:
+        "Il backend è lento solo al primo avvio. Aspetta qualche secondo e poi riprova.",
+    };
+  }
+
+  if (lower.includes("connessione")) {
+    return {
+      label: "Connessione non riuscita",
+      toneClass: "status-pill warning",
+      bannerTitle: "Connessione non riuscita",
+      bannerText:
+        "Non riesco ancora a raggiungere Zeus. Riprova tra poco oppure aggiorna la pagina.",
+    };
+  }
+
+  return {
+    label: statusText,
+    toneClass: "status-pill waking",
+    bannerTitle: "",
+    bannerText: "",
+  };
+}
+
 function App() {
   const [messages, setMessages] = useState(() => {
     const savedMessages = localStorage.getItem("zeus_messages");
@@ -93,6 +161,11 @@ function App() {
     if (!profile.notes.length) return null;
     return profile.notes[profile.notes.length - 1];
   }, [profile.notes]);
+
+  const statusMeta = useMemo(
+    () => getStatusMeta(statusText, isLoading),
+    [statusText, isLoading]
+  );
 
   useEffect(() => {
     const initZeus = async () => {
@@ -237,7 +310,7 @@ function App() {
 
           <div className="sidebar-card">
             <div className="card-label">Stato sistema</div>
-            <div className="status-pill">{statusText}</div>
+            <div className={statusMeta.toneClass}>{statusMeta.label}</div>
           </div>
 
           <div className="sidebar-card">
@@ -300,6 +373,16 @@ function App() {
               Zeus usa memoria strutturata, risposte certe sulle informazioni
               importanti e il modello solo quando serve davvero.
             </p>
+
+            {statusMeta.bannerTitle && (
+              <div className="system-banner">
+                <div className="system-banner-dot"></div>
+                <div className="system-banner-copy">
+                  <strong>{statusMeta.bannerTitle}</strong>
+                  <span>{statusMeta.bannerText}</span>
+                </div>
+              </div>
+            )}
 
             <div className="quick-prompts">
               {QUICK_PROMPTS.map((prompt) => (

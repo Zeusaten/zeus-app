@@ -610,3 +610,64 @@ body {
     text-align: left;
   }
 }
+.status-pill.ready {
+  background: rgba(31, 184, 120, 0.12);
+  border: 1px solid rgba(31, 184, 120, 0.18);
+  color: #117449;
+}
+
+.status-pill.waking {
+  background: rgba(92, 116, 255, 0.1);
+  border: 1px solid rgba(92, 116, 255, 0.18);
+  color: #4259d6;
+}
+
+.status-pill.thinking {
+  background: rgba(124, 103, 255, 0.1);
+  border: 1px solid rgba(124, 103, 255, 0.18);
+  color: #644ad4;
+}
+
+.status-pill.warning {
+  background: rgba(255, 174, 0, 0.12);
+  border: 1px solid rgba(255, 174, 0, 0.2);
+  color: #9a6a00;
+}
+
+.system-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(92, 116, 255, 0.08);
+  border: 1px solid rgba(92, 116, 255, 0.12);
+}
+
+.system-banner-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5c74ff 0%, #7c67ff 100%);
+  box-shadow: 0 0 0 6px rgba(92, 116, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.system-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.system-banner-copy strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.system-banner-copy span {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
