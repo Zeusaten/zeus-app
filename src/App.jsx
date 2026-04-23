@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import "./styles.css";
 import { getZeusAiReply, loadZeusEngine } from "./services/zeusAiReply";
 import {
@@ -11,7 +13,7 @@ import {
 const DEFAULT_MESSAGES = [
   {
     sender: "zeus",
-    text: "Ciao. Sono Zeus. Ti aiuto in italiano con idee, organizzazione e prompt.",
+    text: "Ciao. Sono Zeus. Ti aiuto in italiano con idee, organizzazione, scrittura e ricerche online con fonti.",
     grounded: false,
     searchQueries: [],
     sources: [],
@@ -21,33 +23,14 @@ const DEFAULT_MESSAGES = [
 const QUICK_PROMPTS = [
   "Chi ti ha creato?",
   "Come mi chiamo?",
-  "Aiutami a organizzare una giornata produttiva",
   "Cerca online le ultime notizie su Gemini",
+  "Scrivimi una mail professionale",
 ];
 
-function ZeusAvatar() {
+function ZeusLogo() {
   return (
-    <div className="zeus-avatar">
-      <div className="zeus-avatar-ring"></div>
-      <svg
-        viewBox="0 0 120 120"
-        className="zeus-avatar-svg"
-        aria-hidden="true"
-      >
-        <defs>
-          <linearGradient id="zeusGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#89a6ff" />
-            <stop offset="55%" stopColor="#6f6cff" />
-            <stop offset="100%" stopColor="#b376ff" />
-          </linearGradient>
-        </defs>
-
-        <circle cx="60" cy="60" r="52" fill="rgba(255,255,255,0.96)" />
-        <path
-          d="M64 20L40 61h18l-6 39 28-45H62l2-35z"
-          fill="url(#zeusGlow)"
-        />
-      </svg>
+    <div className="zeus-logo">
+      <span>Z</span>
     </div>
   );
 }
@@ -57,66 +40,40 @@ function getStatusMeta(statusText, isLoading) {
 
   if (isLoading) {
     return {
-      label: "Zeus sta elaborando...",
-      toneClass: "status-pill thinking",
-      bannerTitle: "Zeus sta pensando",
-      bannerText: "Sto elaborando la richiesta e costruendo una risposta completa.",
+      label: "Zeus sta scrivendo...",
+      className: "top-status loading",
     };
   }
 
   if (lower.includes("pronto")) {
     return {
       label: "Zeus è pronto",
-      toneClass: "status-pill ready",
-      bannerTitle: "",
-      bannerText: "",
+      className: "top-status ready",
     };
   }
 
-  if (lower.includes("riattivando") || lower.includes("risvegliando")) {
+  if (
+    lower.includes("riattivando") ||
+    lower.includes("risvegliando") ||
+    lower.includes("lento") ||
+    lower.includes("collegando")
+  ) {
     return {
       label: "Zeus si sta risvegliando...",
-      toneClass: "status-pill waking",
-      bannerTitle: "Sistema in riattivazione",
-      bannerText:
-        "Il server si sta riaccendendo. Succede quando resta inattivo per un po'.",
-    };
-  }
-
-  if (lower.includes("collegando")) {
-    return {
-      label: "Connessione a Zeus...",
-      toneClass: "status-pill waking",
-      bannerTitle: "Connessione in corso",
-      bannerText: "Sto collegando l'interfaccia al cervello di Zeus.",
-    };
-  }
-
-  if (lower.includes("lento")) {
-    return {
-      label: "Zeus si sta risvegliando...",
-      toneClass: "status-pill waking",
-      bannerTitle: "Zeus sta tornando online",
-      bannerText:
-        "Il backend è lento solo al primo avvio. Aspetta qualche secondo e poi riprova.",
+      className: "top-status waking",
     };
   }
 
   if (lower.includes("connessione")) {
     return {
       label: "Connessione non riuscita",
-      toneClass: "status-pill warning",
-      bannerTitle: "Connessione non riuscita",
-      bannerText:
-        "Non riesco ancora a raggiungere Zeus. Riprova tra poco oppure aggiorna la pagina.",
+      className: "top-status warning",
     };
   }
 
   return {
     label: statusText,
-    toneClass: "status-pill waking",
-    bannerTitle: "",
-    bannerText: "",
+    className: "top-status waking",
   };
 }
 
@@ -138,6 +95,21 @@ function normalizeAssistantPayload(payload) {
       : [],
     sources: Array.isArray(payload?.sources) ? payload.sources : [],
   };
+}
+
+function MarkdownMessage({ text }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ ...props }) => (
+          <a {...props} target="_blank" rel="noreferrer" />
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
 }
 
 function App() {
@@ -172,18 +144,15 @@ function App() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [statusText, setStatusText] = useState("Sto preparando Zeus...");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const creatorName = useMemo(
     () => profile.creatorName || null,
     [profile.creatorName]
   );
-
-  const lastNote = useMemo(() => {
-    if (!profile.notes.length) return null;
-    return profile.notes[profile.notes.length - 1];
-  }, [profile.notes]);
 
   const statusMeta = useMemo(
     () => getStatusMeta(statusText, isLoading),
@@ -227,6 +196,14 @@ function App() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    el.style.height = "0px";
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+  }, [input]);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -329,194 +306,199 @@ function App() {
 
   const handleQuickPrompt = (prompt) => {
     setInput(prompt);
+    textareaRef.current?.focus();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (!isLoading && input.trim()) {
+        handleSend(e);
+      }
+    }
   };
 
   return (
-    <div className="page-shell">
-      <div className="premium-orb orb-a"></div>
-      <div className="premium-orb orb-b"></div>
-      <div className="premium-grid"></div>
-
-      <div className="layout-shell">
-        <aside className="sidebar">
-          <div className="sidebar-card sidebar-top">
-            <ZeusAvatar />
-
-            <div className="sidebar-brand">
-              <span className="eyebrow">AI PERSONAL CORE</span>
-              <h1>Zeus</h1>
-              <p>
-                Interfaccia conversazionale personale, luminosa, precisa e
-                futuristica.
-              </p>
+    <div className="chatgpt-shell">
+      <aside className={`left-panel ${sidebarOpen ? "open" : "closed"}`}>
+        <div className="left-panel-header">
+          <div className="brand-row">
+            <ZeusLogo />
+            <div>
+              <div className="brand-title">Zeus</div>
+              <div className="brand-subtitle">AI personale</div>
             </div>
           </div>
 
-          <div className="sidebar-card">
-            <div className="card-label">Stato sistema</div>
-            <div className={statusMeta.toneClass}>{statusMeta.label}</div>
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={() => setSidebarOpen((prev) => !prev)}
+          >
+            {sidebarOpen ? "Chiudi" : "Apri"}
+          </button>
+        </div>
+
+        <div className="left-panel-content">
+          <button type="button" className="new-chat-btn" onClick={handleClearChat}>
+            + Nuova chat
+          </button>
+
+          <div className="side-block">
+            <div className="side-label">Stato</div>
+            <div className={statusMeta.className}>{statusMeta.label}</div>
           </div>
 
-          <div className="sidebar-card">
-            <div className="card-label">Creatore riconosciuto</div>
-            <div className="creator-box">
+          <div className="side-block">
+            <div className="side-label">Creatore</div>
+            <div className="side-value">
               {creatorName || "Non ancora memorizzato"}
             </div>
           </div>
 
-          <div className="sidebar-card">
-            <div className="card-label">Profilo Zeus</div>
-            <div className="memory-stats">
-              <div className="memory-stat">
-                <span className="memory-number">{profile.notes.length}</span>
-                <span className="memory-text">note salvate</span>
-              </div>
-              <div className="memory-stat">
-                <span className="memory-number">{messages.length}</span>
-                <span className="memory-text">messaggi totali</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="sidebar-card">
-            <div className="card-label">Ultimo ricordo</div>
-            <div className="creator-box">
-              {lastNote || "Nessun ricordo disponibile"}
-            </div>
-          </div>
-
-          <div className="sidebar-card">
-            <div className="card-label">Azioni rapide</div>
-            <div className="sidebar-actions">
-              <button
-                type="button"
-                className="sidebar-button"
-                onClick={handleClearChat}
-              >
-                Nuova chat
-              </button>
-              <button
-                type="button"
-                className="sidebar-button sidebar-button-secondary"
-                onClick={handleClearMemory}
-              >
-                Reset memoria
-              </button>
-            </div>
-          </div>
-        </aside>
-
-        <main className="main-panel">
-          <section className="hero-panel">
-            <span className="hero-badge">Zeus Interface</span>
-            <h2>
-              Un sistema conversazionale premium, chiaro e progettato per il
-              futuro.
-            </h2>
-            <p>
-              Zeus usa memoria strutturata, risposte certe sulle informazioni
-              importanti e il modello solo quando serve davvero.
-            </p>
-
-            {statusMeta.bannerTitle && (
-              <div className="system-banner">
-                <div className="system-banner-dot"></div>
-                <div className="system-banner-copy">
-                  <strong>{statusMeta.bannerTitle}</strong>
-                  <span>{statusMeta.bannerText}</span>
-                </div>
-              </div>
-            )}
-
-            <div className="quick-prompts">
+          <div className="side-block">
+            <div className="side-label">Prompt rapidi</div>
+            <div className="quick-list">
               {QUICK_PROMPTS.map((prompt) => (
                 <button
                   key={prompt}
                   type="button"
-                  className="prompt-chip"
+                  className="quick-item"
                   onClick={() => handleQuickPrompt(prompt)}
                 >
                   {prompt}
                 </button>
               ))}
             </div>
-          </section>
+          </div>
 
-          <section className="chat-panel">
-            <div className="chat-header">
-              <div>
-                <div className="chat-title">Conversazione</div>
-                <div className="chat-subtitle">
-                  Chat personale con memoria strutturata, logica ibrida e ricerca web
-                </div>
-              </div>
+          <div className="side-block">
+            <div className="side-label">Memoria</div>
+            <div className="side-actions">
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={handleClearMemory}
+              >
+                Reset memoria
+              </button>
             </div>
+          </div>
+        </div>
+      </aside>
 
-            <div className="messages">
-              {messages.map((message, index) => (
+      <main className="conversation-shell">
+        <header className="conversation-topbar">
+          <button
+            type="button"
+            className="mobile-sidebar-btn"
+            onClick={() => setSidebarOpen((prev) => !prev)}
+          >
+            ☰
+          </button>
+
+          <div className="conversation-title-wrap">
+            <div className="conversation-title">Zeus</div>
+            <div className="conversation-subtitle">
+              Chat personale con memoria, web search e fonti
+            </div>
+          </div>
+        </header>
+
+        <section className="conversation-area">
+          <div className="conversation-inner">
+            {messages.map((message, index) => (
+              <div
+                key={index}
+                className={`chat-row ${
+                  message.sender === "user" ? "user-row" : "assistant-row"
+                }`}
+              >
+                {message.sender === "zeus" && (
+                  <div className="assistant-avatar">Z</div>
+                )}
+
                 <div
-                  key={index}
-                  className={`message-row ${
-                    message.sender === "zeus" ? "left" : "right"
+                  className={`chat-message ${
+                    message.sender === "user"
+                      ? "user-message"
+                      : "assistant-message"
                   }`}
                 >
-                  <div className={`message ${message.sender}`}>
-                    <strong>{message.sender === "zeus" ? "Zeus" : "Tu"}</strong>
-                    <p>{message.text}</p>
-
-                    {message.grounded && (
-                      <div className="message-badge">Risposta verificata sul web</div>
-                    )}
-
-                    {message.sources?.length > 0 && (
-                      <div className="message-sources">
-                        <div className="message-sources-title">Fonti</div>
-
-                        {message.sources.map((source, sourceIndex) => (
-                          <a
-                            key={`${source.url}-${sourceIndex}`}
-                            className="message-source-link"
-                            href={source.url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            {source.title || source.url}
-                          </a>
-                        ))}
+                  {message.sender === "zeus" ? (
+                    <>
+                      <div className="assistant-name">Zeus</div>
+                      <div className="markdown-body">
+                        <MarkdownMessage text={message.text} />
                       </div>
-                    )}
+
+                      {message.grounded && (
+                        <div className="message-badge">
+                          Risposta verificata sul web
+                        </div>
+                      )}
+
+                      {message.sources?.length > 0 && (
+                        <div className="message-sources">
+                          <div className="message-sources-title">Fonti</div>
+                          {message.sources.map((source, sourceIndex) => (
+                            <a
+                              key={`${source.url}-${sourceIndex}`}
+                              className="message-source-link"
+                              href={source.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {source.title || source.url}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="user-text">{message.text}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {isLoading && (
+              <div className="chat-row assistant-row">
+                <div className="assistant-avatar">Z</div>
+                <div className="chat-message assistant-message">
+                  <div className="assistant-name">Zeus</div>
+                  <div className="streaming-loader">
+                    <span></span>
+                    <span></span>
+                    <span></span>
                   </div>
                 </div>
-              ))}
+              </div>
+            )}
 
-              {isLoading && (
-                <div className="message-row left">
-                  <div className="message zeus">
-                    <strong>Zeus</strong>
-                    <div className="typing-loader">
-                      <span></span>
-                      <span></span>
-                      <span></span>
-                    </div>
-                  </div>
-                </div>
-              )}
+            <div ref={messagesEndRef}></div>
+          </div>
+        </section>
 
-              <div ref={messagesEndRef}></div>
+        <footer className="composer-shell">
+          <form className="composer-box" onSubmit={handleSend}>
+            <textarea
+              ref={textareaRef}
+              placeholder="Scrivi un messaggio a Zeus..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+            />
+            <div className="composer-actions">
+              <div className="composer-hint">Invio per inviare · Shift+Invio per andare a capo</div>
+              <button type="submit" className="send-btn" disabled={isLoading || !input.trim()}>
+                Invia
+              </button>
             </div>
-
-            <form className="input-area" onSubmit={handleSend}>
-              <input
-                type="text"
-                placeholder="Scrivi un messaggio a Zeus..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-              />
-              <button type="submit">Invia</button>
-            </form>
-          </section>
-        </main>
-      </div>
+          </form>
+        </footer>
+      </main>
     </div>
   );
 }
