@@ -565,6 +565,43 @@ function fuzzyTokenMatch(token, textTokens) {
   return textTokens.some((candidate) => fuzzyEquals(token, candidate));
 }
 
+
+function getCategoryAliasTerms(config, category) {
+  if (!category || !config?.categoryAliases) return [];
+
+  const aliases = config.categoryAliases[category] || [];
+  return [category, ...aliases].filter(Boolean);
+}
+
+function productMatchesCategory(product, category, config, rawQuery = "") {
+  if (!category) return true;
+
+  const haystack = normalizeText(
+    `${product.name || ""} ${product.brand || ""} ${product.category || ""} ${product.description || ""}`
+  );
+
+  const productCategory = normalizeText(product.category);
+  const wantedCategory = normalizeText(category);
+
+  if (productCategory && productCategory === wantedCategory) return true;
+  if (wantedCategory && haystack.includes(wantedCategory)) return true;
+
+  const aliasTerms = getCategoryAliasTerms(config, category);
+
+  for (const term of aliasTerms) {
+    const normalizedTerm = normalizeText(term);
+    if (!normalizedTerm || normalizedTerm.length < 3) continue;
+
+    if (haystack.includes(normalizedTerm)) return true;
+  }
+
+  const queryTokens = tokenize(rawQuery).filter(
+    (token) => token.length >= 3 && !BASE_STOPWORDS.has(token)
+  );
+
+  return queryTokens.some((token) => haystack.includes(token));
+}
+
 function productMatchesAudience(product, audience) {
   if (!audience) return true;
 
@@ -593,6 +630,8 @@ function scoreProduct(product, context) {
       score += 24;
     } else if (haystack.includes(normalizeText(context.category))) {
       score += 12;
+    } else if (productMatchesCategory(product, context.category, context.config, context.rawQuery)) {
+      score += 10;
     }
   }
 
@@ -696,16 +735,14 @@ export async function searchCatalog(filters = {}, options = {}) {
     minPrice,
     maxPrice,
     queryTokens,
+    config,
   };
 
   let results = products.filter((product) => {
     if (brand && !fuzzyEquals(product.brand, brand)) return false;
 
-    if (category) {
-      const productCategory = normalizeText(product.category);
-      const wantedCategory = normalizeText(category);
-      const productName = normalizeText(product.name);
-      if (productCategory !== wantedCategory && !productName.includes(wantedCategory)) return false;
+    if (category && !productMatchesCategory(product, category, config, rawQuery)) {
+      return false;
     }
 
     if (audience && !productMatchesAudience(product, audience)) return false;
@@ -746,6 +783,32 @@ export async function searchCatalog(filters = {}, options = {}) {
       return String(a.name || "").localeCompare(String(b.name || ""));
     })
     .map(({ _score, ...product }) => product);
+
+  if (results.length === 0 && rawQuery) {
+    const fallbackTokens = queryTokens.filter((token) => token.length >= 3);
+
+    if (fallbackTokens.length > 0) {
+      results = products
+        .map((product) => {
+          const haystack = normalizeText(
+            `${product.name || ""} ${product.brand || ""} ${product.category || ""} ${product.description || ""}`
+          );
+
+          const matchedTokens = fallbackTokens.filter((token) => haystack.includes(token));
+
+          return {
+            ...product,
+            _score: matchedTokens.reduce((sum, token) => sum + token.length, 0),
+          };
+        })
+        .filter((product) => product._score > 0)
+        .sort((a, b) => {
+          if (b._score !== a._score) return b._score - a._score;
+          return String(a.name || "").localeCompare(String(b.name || ""));
+        })
+        .map(({ _score, ...product }) => product);
+    }
+  }
 
   return results;
 }

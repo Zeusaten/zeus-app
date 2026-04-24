@@ -1043,7 +1043,7 @@ function App() {
               : isDemmaMode
                 ? "Non ho trovato prodotti compatibili nel catalogo Demma. Prova a specificare meglio categoria, marca, prodotto, prezzo o disponibilità."
                 : "Non ho trovato prodotti compatibili nel catalogo New Form. Prova a specificare meglio il tipo di capo, il reparto (uomo, donna, bambino, bambina), il brand, il colore, la taglia o il prezzo.",
-          grounded: true,
+          grounded: false,
           searchQueries: [],
           sources: [],
           products: results,
@@ -1080,7 +1080,7 @@ function App() {
         appendMessageToConversation(conversationId, {
           sender: "zeus",
           text: formatCatalogReply(results),
-          grounded: true,
+          grounded: false,
           searchQueries: [],
           sources: [],
           products: results,
