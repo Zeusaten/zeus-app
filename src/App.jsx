@@ -22,7 +22,10 @@ import {
   pollCanvaExport,
   startCanvaConnect,
 } from "./services/canvaApi";
-import { searchCatalog } from "./services/catalogApi";
+import {
+  searchCatalog,
+  isLikelyCatalogQuery,
+} from "./services/catalogApi";
 
 const STORAGE_CONVERSATIONS = "zeus_conversations";
 const STORAGE_ACTIVE_CONVERSATION = "zeus_active_conversation";
@@ -201,18 +204,125 @@ function ProductShoppingCard({ product }) {
 }
 
 function ProductShoppingRail({ products }) {
+  const railRef = useRef(null);
+  const INITIAL_VISIBLE = 8;
+  const STEP = 8;
+
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const visibleProducts = products.slice(0, visibleCount);
+  const hasMoreProducts = visibleCount < products.length;
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE);
+  }, [products]);
+
+  const updateScrollState = useCallback(() => {
+    const el = railRef.current;
+    if (!el) return;
+
+    setCanScrollLeft(el.scrollLeft > 8);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+  }, []);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(updateScrollState);
+    return () => cancelAnimationFrame(id);
+  }, [visibleProducts.length, updateScrollState]);
+
+  function scrollRail(direction) {
+    const el = railRef.current;
+    if (!el) return;
+
+    el.scrollBy({
+      left: direction * 340,
+      behavior: "smooth",
+    });
+
+    setTimeout(updateScrollState, 250);
+  }
+
+  function loadMoreProducts() {
+    setVisibleCount((prev) => Math.min(prev + STEP, products.length));
+
+    setTimeout(() => {
+      updateScrollState();
+    }, 50);
+  }
+
+  function handleRightAction() {
+    if (canScrollRight) {
+      scrollRail(1);
+      return;
+    }
+
+    if (hasMoreProducts) {
+      loadMoreProducts();
+
+      setTimeout(() => {
+        scrollRail(1);
+      }, 80);
+    }
+  }
+
   if (!Array.isArray(products) || products.length === 0) return null;
 
   return (
-    <div className="shopping-rail-wrap">
-      <div className="shopping-rail" role="list" aria-label="Prodotti trovati">
-        {products.map((product) => (
+    <div className="shopping-rail-shell">
+      <div className="shopping-rail-header">
+        <div className="shopping-rail-summary">
+          {visibleProducts.length} di {products.length} prodotti visibili
+        </div>
+
+        <div className="shopping-rail-controls">
+          <button
+            type="button"
+            className="shopping-rail-arrow"
+            onClick={() => scrollRail(-1)}
+            disabled={!canScrollLeft}
+            aria-label="Scorri a sinistra"
+          >
+            ‹
+          </button>
+
+          <button
+            type="button"
+            className="shopping-rail-arrow"
+            onClick={handleRightAction}
+            disabled={!canScrollRight && !hasMoreProducts}
+            aria-label="Scorri a destra o carica altri prodotti"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+
+      <div
+        ref={railRef}
+        className="shopping-rail"
+        role="list"
+        aria-label="Prodotti trovati"
+        onScroll={updateScrollState}
+      >
+        {visibleProducts.map((product) => (
           <ProductShoppingCard
             key={`${product.id}-${product.url}`}
             product={product}
           />
         ))}
       </div>
+
+      {hasMoreProducts && (
+        <button
+          type="button"
+          className="shopping-show-more"
+          onClick={loadMoreProducts}
+        >
+          Carica altri {Math.min(STEP, products.length - visibleCount)} prodotti
+        </button>
+      )}
     </div>
   );
 }
@@ -304,182 +414,21 @@ function openUrls(urls = []) {
 }
 
 function looksLikeCatalogQuery(text) {
-  const t = text.toLowerCase();
-
-  const productWords = [
-    "maglietta",
-    "magliette",
-    "tshirt",
-    "t-shirt",
-    "pantalone",
-    "pantaloni",
-    "felpa",
-    "felpe",
-    "scarpa",
-    "scarpe",
-    "prodotto",
-    "prodotti",
-    "taglia",
-    "disponibile",
-    "disponibili",
-    "brand",
-    "marca",
-    "catalogo",
-    "nero",
-    "nera",
-    "bianca",
-    "bianco",
-    "blu",
-    "verde",
-    "rosso",
-    "rossa",
-    "sotto",
-    "meno di",
-    "più di",
-    "sopra",
-  ];
-
-  return productWords.some((word) => t.includes(word));
+  return isLikelyCatalogQuery(text);
 }
 
 function extractCatalogFilters(text) {
-  const t = text.toLowerCase();
-  const filters = {};
-
-  if (t.includes("uomo")) filters.gender = "Uomo";
-  if (t.includes("donna")) filters.gender = "Donna";
-
-  if (
-    t.includes("maglietta") ||
-    t.includes("magliette") ||
-    t.includes("tshirt") ||
-    t.includes("t-shirt")
-  ) {
-    filters.category = "Tshirt";
-  }
-
-  if (t.includes("disponibile") || t.includes("disponibili")) {
-    filters.availability = "IN_STOCK";
-  }
-
-  const sizePatterns = [
-    { regex: /\bxxl\b/i, value: "XXL" },
-    { regex: /\bxl\b/i, value: "XL" },
-    { regex: /\bxs\b/i, value: "XS" },
-    { regex: /\bm\b/i, value: "M" },
-    { regex: /\bl\b/i, value: "L" },
-    { regex: /\bs\b/i, value: "S" },
-  ];
-
-  for (const item of sizePatterns) {
-    if (item.regex.test(text)) {
-      filters.size = item.value;
-      break;
-    }
-  }
-
-  const knownBrands = [
-    "Dsquared",
-    "Tommy Hilfiger",
-    "Calvin Klein",
-    "North Sails",
-    "Guess",
-    "Vans",
-    "Refrigue",
-    "Harmont&Blaine",
-  ];
-
-  for (const brand of knownBrands) {
-    if (t.includes(brand.toLowerCase())) {
-      filters.brand = brand;
-      break;
-    }
-  }
-
-  const colorMap = [
-    "nero",
-    "nera",
-    "neri",
-    "nere",
-    "bianco",
-    "bianca",
-    "bianchi",
-    "bianche",
-    "blu",
-    "verde",
-    "rosso",
-    "rossa",
-    "giallo",
-    "gialla",
-    "grigio",
-    "grigia",
-  ];
-
-  for (const color of colorMap) {
-    if (t.includes(color)) {
-      if (color.startsWith("ner")) filters.color = "nero";
-      else if (color.startsWith("bian")) filters.color = "bianco";
-      else if (color.startsWith("ross")) filters.color = "rosso";
-      else if (color.startsWith("giall")) filters.color = "giallo";
-      else if (color.startsWith("grigi")) filters.color = "grigio";
-      else filters.color = color;
-      break;
-    }
-  }
-
-  const maxPriceMatch =
-    t.match(/sotto\s+i?\s*([0-9]+(?:[.,][0-9]+)?)/i) ||
-    t.match(/meno di\s*([0-9]+(?:[.,][0-9]+)?)/i) ||
-    t.match(/max(?:imum)?\s*([0-9]+(?:[.,][0-9]+)?)/i);
-
-  if (maxPriceMatch) {
-    filters.max_price = Number(maxPriceMatch[1].replace(",", "."));
-  }
-
-  const minPriceMatch =
-    t.match(/sopra\s+i?\s*([0-9]+(?:[.,][0-9]+)?)/i) ||
-    t.match(/pi[uù] di\s*([0-9]+(?:[.,][0-9]+)?)/i);
-
-  if (minPriceMatch) {
-    filters.min_price = Number(minPriceMatch[1].replace(",", "."));
-  }
-
-  if (
-    !filters.brand &&
-    !filters.category &&
-    !filters.gender &&
-    !filters.size &&
-    !filters.color &&
-    filters.min_price == null &&
-    filters.max_price == null
-  ) {
-    filters.q = text;
-  }
-
-  return filters;
+  return {
+    raw_query: text,
+  };
 }
 
-function formatCatalogReply(results, filters) {
+function formatCatalogReply(results) {
   if (!Array.isArray(results) || results.length === 0) {
-    return "Non ho trovato prodotti compatibili con la richiesta nel catalogo che ho sincronizzato.";
+    return "Non ho trovato prodotti compatibili con la richiesta nel catalogo New Form.";
   }
 
-  const introParts = [];
-  if (filters.category) introParts.push(filters.category);
-  if (filters.brand) introParts.push(filters.brand);
-  if (filters.gender) introParts.push(filters.gender);
-  if (filters.size) introParts.push(`taglia ${filters.size}`);
-  if (filters.color) introParts.push(filters.color);
-  if (filters.max_price) introParts.push(`max €${filters.max_price}`);
-
-  const summary =
-    introParts.length > 0
-      ? `Ho trovato ${results.length} prodotti compatibili (${introParts.join(
-          ", "
-        )}).`
-      : `Ho trovato ${results.length} prodotti compatibili.`;
-
-  return `${summary}\n\nTi lascio qui sotto le anteprime dei prodotti.`;
+  return `Ho trovato ${results.length} prodotti compatibili.\n\nTi lascio qui sotto le anteprime dei prodotti.`;
 }
 
 function App() {
@@ -935,11 +884,11 @@ function App() {
 
         appendMessageToConversation(conversationId, {
           sender: "zeus",
-          text: formatCatalogReply(results, filters),
+          text: formatCatalogReply(results),
           grounded: true,
           searchQueries: [],
           sources: [],
-          products: results.slice(0, 10),
+          products: results,
         });
 
         setStatusText("Zeus è pronto");
