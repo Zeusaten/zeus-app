@@ -527,7 +527,7 @@ Continua adesso:
 }
 
 
-function compactCatalogProducts(products = [], maxItems = 30) {
+function compactCatalogProducts(products = [], maxItems = 12) {
   if (!Array.isArray(products)) return [];
 
   return products.slice(0, maxItems).map((product, index) => ({
@@ -609,19 +609,20 @@ REGOLE NON NEGOZIABILI:
 - Non inventare prodotti, prezzi, disponibilità, formati o caratteristiche non presenti nei dati.
 - Se i prodotti non bastano per rispondere bene, dillo chiaramente e chiedi un dettaglio utile.
 - Se l'utente chiede consigli medici o sanitari, non fare diagnosi e non dare terapia: limitati a proporre prodotti pertinenti del catalogo e consiglia di chiedere a un professionista.
-- Rispondi in italiano, in modo naturale, commerciale e sintetico.
-- Tieni la risposta compatta: massimo 8-12 righe, salvo richiesta esplicita di dettaglio.
-- Non elencare tutti i prodotti se sono tanti: seleziona solo i più pertinenti.
-- Cita al massimo 6-8 prodotti per risposta, raggruppandoli per bisogno, marca o uso.
-- Se ci sono molti prodotti simili, riassumi per famiglie: ad esempio "latti liquidi", "merende baby", "integratori", "salviette", "pannolini taglia 1-6".
-- Cita i prodotti per nome esatto quando sono pochi o quando servono per confronto.
-- Quando utile, raggruppa per bisogno: economico, baby, casa, alimentare, igiene, ecc.
-- Se l'utente chiede un confronto, evidenzia differenze pratiche: marca, tipo prodotto, prezzo e disponibilità.
-- Se tutti i prodotti pertinenti sono non disponibili, dillo subito nella prima frase e poi riassumi le alternative o chiedi se vuole cercare prodotti disponibili.
+FORMATO OBBLIGATORIO:
+- Rispondi in massimo 90 parole.
+- Usa massimo 5 punti elenco totali.
+- NON elencare tutti i prodotti ricevuti.
+- Se ci sono tanti prodotti, riassumi per famiglie e cita solo 3-5 esempi.
+- Prima frase: risultato principale della ricerca.
+- Se tutti i prodotti pertinenti sono non disponibili, scrivilo subito nella prima frase.
+- Se l'utente chiede un confronto, confronta per tipo prodotto, prezzo e disponibilità, senza lista lunga.
+- Cita i prodotti per nome esatto solo quando sono davvero utili.
 - Non dire che hai cercato sul web.
 - Non dire che hai fonti web.
-- Non mostrare link grezzi se non necessario: le card prodotto saranno già sotto la risposta.
-- Non scrivere codici tecnici come IN_STOCK o OUT_OF_STOCK. Usa sempre frasi naturali: "disponibile" o "non disponibile".
+- Non mostrare link grezzi: le card prodotto sono già sotto.
+- Non scrivere codici tecnici come IN_STOCK o OUT_OF_STOCK. Usa solo "disponibile" o "non disponibile".
+- Se serve più dettaglio, chiudi con: "Vuoi che ti mostri solo i disponibili o una fascia di prezzo precisa?"
 
 PRODOTTI_CATALOGO_JSON:
 ${JSON.stringify(compactProducts, null, 2)}
@@ -629,13 +630,13 @@ ${JSON.stringify(compactProducts, null, 2)}
 DOMANDA_UTENTE:
 ${userText}
 
-Rispondi ora come ${assistantName}, usando solo PRODOTTI_CATALOGO_JSON.
+Rispondi ora come ${assistantName}, usando solo PRODOTTI_CATALOGO_JSON. Rispetta rigidamente il formato obbligatorio e non superare 90 parole.
 `;
 }
 
 async function generateCatalogBrainReply(payload) {
   const prompt = buildCatalogBrainPrompt(payload);
-  const response = await callGeminiNoSearchWithRetry(prompt, 900);
+  const response = await callGeminiNoSearchWithRetry(prompt, 450);
   const text = getResponseText(response);
 
   return {
