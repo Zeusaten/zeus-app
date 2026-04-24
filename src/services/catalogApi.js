@@ -1,299 +1,163 @@
-let catalogCache = null;
-
-const STOPWORDS = new Set([
-  "fammi",
-  "farmi",
-  "vedere",
-  "mostrami",
-  "mostra",
-  "cerco",
-  "cerca",
-  "voglio",
-  "vorrei",
-  "dammi",
-  "trovami",
-  "trova",
-  "hai",
-  "avete",
-  "mi",
-  "serve",
-  "servono",
-  "puoi",
-  "potresti",
-  "metti",
-  "lista",
-  "elenco",
-  "articoli",
-  "prodotti",
-  "capi",
-  "capo",
-  "abbigliamento",
-  "moda",
-  "outfit",
-  "di",
-  "da",
-  "del",
-  "della",
-  "dello",
-  "dei",
-  "delle",
-  "degli",
-  "per",
-  "con",
-  "in",
-  "su",
-  "che",
-  "il",
-  "lo",
-  "la",
-  "i",
-  "gli",
-  "le",
-  "un",
-  "una",
-  "uno",
-  "e",
-  "o",
-  "a",
-  "al",
-  "alla",
-  "allo",
-  "ai",
-  "agli",
-  "alle",
-  "uomo",
-  "uomini",
-  "donna",
-  "donne",
-  "bambino",
-  "bambini",
-  "bambina",
-  "bambine",
-]);
-
-const GENERIC_CLOTHING_TERMS = [
-  "abbigliamento",
-  "capo",
-  "capi",
-  "vestiti",
-  "moda",
-  "outfit",
-  "look",
-  "articolo",
-  "articoli",
-  "prodotto",
-  "prodotti",
-];
-
-const CATEGORY_ALIASES = {
-  Tshirt: [
-    "tshirt",
-    "t-shirt",
-    "t shirt",
-    "tee",
-    "tee shirt",
-    "maglietta",
-    "magliette",
-    "maglia manica corta",
-    "maglie manica corta",
-  ],
-  Maglie: [
-    "maglia",
-    "maglie",
-    "maglione",
-    "maglioni",
-    "pullover",
-    "lupetto",
-    "dolcevita",
-    "cardigan",
-    "sweater",
-    "knitwear",
-  ],
-  Felpe: [
-    "felpa",
-    "felpe",
-    "hoodie",
-    "hoodies",
-    "sweatshirt",
-    "felpa cappuccio",
-    "felpa con cappuccio",
-    "felpa girocollo",
-  ],
-  Camicie: [
-    "camicia",
-    "camicie",
-    "shirt",
-    "shirts",
-    "camicia elegante",
-    "camicia casual",
-  ],
-  Bluse: ["blusa", "bluse", "blouse", "blouses"],
-  Polo: ["polo", "polo shirt", "polo manica corta", "polo manica lunga"],
-  Top: ["top", "canotta", "canotte", "tank top", "crop top", "body", "bodysuit"],
-  Pantaloni: [
-    "pantalone",
-    "pantaloni",
-    "trousers",
-    "pants",
-    "cargo",
-    "chino",
-    "chinos",
-    "jogger",
-    "joggers",
-    "pantaloni eleganti",
-    "pantaloni casual",
-  ],
-  Jeans: ["jeans", "jean", "denim", "pantaloni jeans"],
-  Shorts: ["short", "shorts", "bermuda", "bermudas", "pantaloncino", "pantaloncini"],
-  Leggings: ["leggings", "legging", "fuseaux"],
-  Gonne: ["gonna", "gonne", "skirt", "skirts", "minigonna", "minigonne"],
-  Abiti: ["abito", "abiti", "vestito", "dress", "dresses", "tubino"],
-  Tute: ["tuta", "tute", "tracksuit", "jumpsuit", "completo tuta"],
-  Giacche: ["giacca", "giacche", "jacket", "jackets", "blazer", "giacca leggera"],
-  Giubbotti: [
-    "giubbotto",
-    "giubbotti",
-    "piumino",
-    "piumini",
-    "bomber",
-    "parka",
-    "cappotto",
-    "cappotti",
-    "coat",
-    "coats",
-    "outerwear",
-    "giaccone",
-    "kway",
-    "k-way",
-  ],
-  Gilet: ["gilet", "smanicato", "smanicati", "vest", "panciotto"],
-  Scarpe: [
-    "scarpa",
-    "scarpe",
-    "sneaker",
-    "sneakers",
-    "tennis",
-    "calzatura",
-    "calzature",
-    "stivale",
-    "stivali",
-    "mocassino",
-    "mocassini",
-    "sandalo",
-    "sandali",
-    "scarpe da ginnastica",
-    "scarpe ginnastica",
-  ],
-  Ciabatte: ["ciabatta", "ciabatte", "slipper", "slippers", "infradito", "flip flop", "slides"],
-  "Costumi mare": [
-    "costume",
-    "costumi",
-    "costume mare",
-    "costumi mare",
-    "costume da bagno",
-    "costumi da bagno",
-    "boxer mare",
-    "boxer da mare",
-    "slip mare",
-    "slip da mare",
-    "swimwear",
-    "bikini",
-    "trikini",
-  ],
-  "Telo mare": ["telo mare", "telo da mare", "asciugamano mare", "beach towel"],
-  "Teli mare": ["teli mare", "teli da mare", "asciugamani mare"],
-  Intimo: ["intimo", "mutanda", "mutande", "boxer", "slip", "reggiseno", "reggiseni", "bralette", "underwear"],
-  Calze: ["calza", "calze", "calzino", "calzini", "socks", "sock"],
-  Borse: [
-    "borsa",
-    "borse",
-    "bag",
-    "bags",
-    "borsetta",
-    "borsette",
-    "tracolla",
-    "tracolle",
-    "shopping bag",
-    "shopper",
-    "pochette",
-    "clutch",
-    "marsupio",
-    "marsupi",
-  ],
-  Zaini: ["zaino", "zaini", "backpack", "backpacks"],
-  Portafogli: ["portafoglio", "portafogli", "wallet", "wallets", "portacarte", "porta carte", "card holder"],
-  Cinture: ["cintura", "cinture", "belt", "belts"],
-  Cappelli: ["cappello", "cappelli", "berretto", "berretti", "cappellino", "cappellini", "cap", "caps", "hat", "hats", "beanie"],
-  Sciarpe: ["sciarpa", "sciarpe", "foulard", "stola", "scarf", "scarves"],
-  Cravatte: ["cravatta", "cravatte", "tie", "ties"],
-  Papillon: ["papillon", "bow tie", "farfallino"],
-  Bracciali: ["bracciale", "bracciali", "bracelet", "bracelets"],
-  Orologi: ["orologio", "orologi", "watch", "watches"],
-  Portachiavi: ["portachiavi", "porta chiavi", "keychain", "key ring"],
-  Accessori: ["accessorio", "accessori", "accessory", "accessories"],
+const CATALOG_KEYS = {
+  NEWFORM: "newform",
+  DEMMA: "demma",
 };
 
-const GENDER_ALIASES = {
-  Uomo: [
-    "uomo",
-    "uomini",
-    "da uomo",
-    "per uomo",
-    "adulto uomo",
-    "maschile",
-    "maschio",
-    "signore",
-    "signori",
-    "man",
-    "men",
-    "male",
-  ],
-  Donna: [
-    "donna",
-    "donne",
-    "da donna",
-    "per donna",
-    "adulta donna",
-    "femminile",
-    "femmina",
-    "signora",
-    "signore donna",
-    "woman",
-    "women",
-    "female",
-  ],
-  Bambino: [
-    "bambino",
-    "bambini",
-    "bimbo",
-    "bimbi",
-    "da bambino",
-    "per bambino",
-    "maschietto",
-    "neonato",
-    "junior maschio",
-    "ragazzino",
-    "ragazzini",
-    "boy",
-    "boys",
-    "kid boy",
-  ],
-  Bambina: [
-    "bambina",
-    "bambine",
-    "bimba",
-    "bimbe",
-    "da bambina",
-    "per bambina",
-    "femminuccia",
-    "neonata",
-    "junior femmina",
-    "ragazzina",
-    "ragazzine",
-    "girl",
-    "girls",
-    "kid girl",
-  ],
+const CATALOG_CONFIGS = {
+  [CATALOG_KEYS.NEWFORM]: {
+    path: "/catalog/catalog.json",
+    name: "New Form",
+    productWord: "capo",
+    stopwords: [
+      "uomo", "uomini", "donna", "donne", "bambino", "bambini", "bambina", "bambine",
+    ],
+    categoryAliases: {
+      Tshirt: [
+        "tshirt", "t-shirt", "t shirt", "tee", "tee shirt", "maglietta", "magliette",
+        "maglia manica corta", "maglie manica corta",
+      ],
+      Maglie: [
+        "maglia", "maglie", "maglione", "maglioni", "pullover", "lupetto", "dolcevita",
+        "cardigan", "sweater", "knitwear",
+      ],
+      Felpe: [
+        "felpa", "felpe", "hoodie", "hoodies", "sweatshirt", "felpa cappuccio",
+        "felpa con cappuccio", "felpa girocollo",
+      ],
+      Camicie: ["camicia", "camicie", "shirt", "shirts", "camicia elegante", "camicia casual"],
+      Bluse: ["blusa", "bluse", "blouse", "blouses"],
+      Polo: ["polo", "polo shirt", "polo manica corta", "polo manica lunga"],
+      Top: ["top", "canotta", "canotte", "tank top", "crop top", "body", "bodysuit"],
+      Pantaloni: [
+        "pantalone", "pantaloni", "trousers", "pants", "cargo", "chino", "chinos",
+        "jogger", "joggers", "pantaloni eleganti", "pantaloni casual",
+      ],
+      Jeans: ["jeans", "jean", "denim", "pantaloni jeans"],
+      Shorts: ["short", "shorts", "bermuda", "bermudas", "pantaloncino", "pantaloncini"],
+      Leggings: ["leggings", "legging", "fuseaux"],
+      Gonne: ["gonna", "gonne", "skirt", "skirts", "minigonna", "minigonne"],
+      Abiti: ["abito", "abiti", "vestito", "vestiti", "dress", "dresses", "tubino"],
+      Tute: ["tuta", "tute", "tracksuit", "jumpsuit", "completo tuta"],
+      Giacche: ["giacca", "giacche", "jacket", "jackets", "blazer", "giacca leggera"],
+      Giubbotti: [
+        "giubbotto", "giubbotti", "piumino", "piumini", "bomber", "parka", "cappotto",
+        "cappotti", "coat", "coats", "outerwear", "giaccone", "kway", "k-way",
+      ],
+      Gilet: ["gilet", "smanicato", "smanicati", "vest", "panciotto"],
+      Scarpe: [
+        "scarpa", "scarpe", "sneaker", "sneakers", "tennis", "calzatura", "calzature",
+        "stivale", "stivali", "mocassino", "mocassini", "sandalo", "sandali",
+        "scarpe da ginnastica", "scarpe ginnastica",
+      ],
+      Ciabatte: ["ciabatta", "ciabatte", "slipper", "slippers", "infradito", "flip flop", "slides"],
+      "Costumi mare": [
+        "costume", "costumi", "costume mare", "costumi mare", "costume da bagno",
+        "costumi da bagno", "boxer mare", "boxer da mare", "slip mare", "slip da mare",
+        "swimwear", "bikini", "trikini",
+      ],
+      "Telo mare": ["telo mare", "telo da mare", "asciugamano mare", "beach towel"],
+      "Teli mare": ["teli mare", "teli da mare", "asciugamani mare"],
+      Intimo: [
+        "intimo", "mutanda", "mutande", "boxer", "slip", "reggiseno", "reggiseni",
+        "bralette", "underwear",
+      ],
+      Calze: ["calza", "calze", "calzino", "calzini", "socks", "sock"],
+      Borse: [
+        "borsa", "borse", "bag", "bags", "borsetta", "borsette", "tracolla", "tracolle",
+        "shopping bag", "shopper", "pochette", "clutch", "marsupio", "marsupi",
+      ],
+      Zaini: ["zaino", "zaini", "backpack", "backpacks"],
+      Portafogli: [
+        "portafoglio", "portafogli", "wallet", "wallets", "portacarte", "porta carte", "card holder",
+      ],
+      Cinture: ["cintura", "cinture", "belt", "belts"],
+      Cappelli: [
+        "cappello", "cappelli", "berretto", "berretti", "cappellino", "cappellini", "cap",
+        "caps", "hat", "hats", "beanie",
+      ],
+      Sciarpe: ["sciarpa", "sciarpe", "foulard", "stola", "scarf", "scarves"],
+      Cravatte: ["cravatta", "cravatte", "tie", "ties"],
+      Papillon: ["papillon", "bow tie", "farfallino"],
+      Bracciali: ["bracciale", "bracciali", "bracelet", "bracelets"],
+      Orologi: ["orologio", "orologi", "watch", "watches"],
+      Portachiavi: ["portachiavi", "porta chiavi", "keychain", "key ring"],
+      Accessori: ["accessorio", "accessori", "accessory", "accessories"],
+    },
+    audienceAliases: {
+      Uomo: ["uomo", "uomini", "da uomo", "per uomo", "adulto uomo", "maschile", "maschio", "signore", "signori", "man", "men", "male"],
+      Donna: ["donna", "donne", "da donna", "per donna", "adulta donna", "femminile", "femmina", "signora", "woman", "women", "female"],
+      Bambino: ["bambino", "bambini", "bimbo", "bimbi", "da bambino", "per bambino", "maschietto", "neonato", "junior maschio", "ragazzino", "boy", "boys"],
+      Bambina: ["bambina", "bambine", "bimba", "bimbe", "da bambina", "per bambina", "femminuccia", "neonata", "junior femmina", "ragazzina", "girl", "girls"],
+    },
+    extraLikelyTerms: [
+      "abbigliamento", "capo", "capi", "vestiti", "moda", "outfit", "look", "taglia", "taglie",
+      "dsquared", "tommy", "hilfiger", "calvin", "klein", "guess", "vans", "refrigue",
+      "refrigiwear", "harmont", "blaine", "liu jo", "liu-jo", "sun68", "moschino", "diesel", "napapijri",
+    ],
+  },
+
+  [CATALOG_KEYS.DEMMA]: {
+    path: "/catalog/demma/catalog.json",
+    name: "Sanitaria Demma",
+    productWord: "prodotto",
+    stopwords: [
+      "demma", "sanitaria", "bimbo", "bimbi", "bambino", "bambini", "bambina", "bambine",
+      "mamma", "casa", "adulto", "adulti",
+    ],
+    categoryAliases: {
+      Pannolini: [
+        "pannolino", "pannolini", "pannolini bimbo", "pannolini bambino", "pannolini bambina",
+        "pampers", "huggies", "dry nites", "drynites", "swimpants", "little swimmer", "salvaletto",
+      ],
+      "Dietetica per bimbi": [
+        "dietetica", "dietetica bimbi", "dietetica per bimbi", "alimenti infanzia", "cibi infanzia",
+        "latte", "latte crescita", "latte in polvere", "latte liquido", "humana", "mellin", "hipp",
+        "plasmon", "nipiol", "omogeneizzato", "omogeneizzati", "pastina", "pappa", "pappe", "merenda",
+        "merendina", "frullato", "frutta", "pouch", "biscotti", "biscotto",
+      ],
+      "Detergenza per bimbi": [
+        "detergenza bimbi", "detergenza per bimbi", "detergente bimbi", "detergente bambini",
+        "salviette", "salviettine", "salviette baby", "bagnetto", "shampoo baby", "crema cambio",
+        "pasta cambio", "camomilla baby", "baby wash",
+      ],
+      "Puericultura Leggera": [
+        "puericultura leggera", "biberon", "ciuccio", "ciucci", "tettarella", "tettarelle",
+        "massaggiagengive", "posate bimbo", "piattino", "bicchiere bimbo", "portaciuccio",
+      ],
+      "Puericultura Pesante": [
+        "puericultura pesante", "passeggino", "passeggini", "seggiolino", "seggiolini", "seggiolone",
+        "culla", "lettino", "box", "girello", "sdraietta", "trio", "carrozzina",
+      ],
+      Corredino: ["corredino", "copertina", "copertine", "body neonato", "tutina", "tutine", "bavaglino", "bavaglini", "lenzuolino", "lenzuolini"],
+      Cosmetica: ["cosmetica", "crema", "creme", "shampoo", "bagnoschiuma", "sapone", "olio", "lozione", "deodorante", "igiene personale"],
+      Farmaceutici: ["farmaceutico", "farmaceutici", "cerotti", "garze", "termometro", "disinfettante", "aerosol", "integratore", "integratori", "vitamine"],
+      "Elettro Medicali": ["elettromedicali", "elettro medicali", "aerosol", "misuratore pressione", "pressione", "termometro", "bilancia", "saturimetro"],
+      Giocattolo: ["giocattolo", "giocattoli", "gioco", "giochi", "peluche", "costruzioni", "bambola", "macchinina"],
+      "Linea Premaman": ["premaman", "gravidanza", "maternita", "mamma", "allattamento", "assorbenti seno", "coppette seno", "fascia gravidanza"],
+      "Linea Animali": ["animali", "cane", "cani", "gatto", "gatti", "sacchetti animali", "traversine", "crocchette", "lettiera", "talco animali"],
+      Detersivi: ["detersivo", "detersivi", "bucato", "ammorbidente", "candeggina", "lavatrice", "piatti", "detergente casa"],
+      Casalinghi: ["casalinghi", "casa", "cucina", "spugna", "spugne", "sacchetti", "pellicola", "alluminio", "contenitori"],
+      Alimentari: ["alimentari", "cibo", "alimenti", "pasta", "riso", "biscotti", "snack", "barretta", "barrette", "bibite", "dolci", "dolciumi"],
+      "Dolciumi e Bibite": ["dolciumi", "bibite", "caramelle", "candy", "lollipop", "bevanda", "bevande", "succhi"],
+      Profumeria: ["profumeria", "profumo", "profumi", "make up", "trucco", "cosmesi", "alta profumeria", "profumeria alta", "profumeria bassa"],
+      Cancelleria: ["cancelleria", "penna", "penne", "quaderno", "quaderni", "matita", "matite", "colori"],
+      Elettricità: ["elettricita", "elettricità", "batterie", "pila", "pile", "lampadina", "lampadine"],
+      Party: ["party", "festa", "feste", "carnevale", "stelle filanti", "coriandoli", "palloncini"],
+      Accessori: ["accessori", "accessorio", "accessori uomo", "accessori donna", "accessori bambino"],
+    },
+    audienceAliases: {
+      Bimbi: ["bimbo", "bimbi", "bambino", "bambini", "bambina", "bambine", "neonato", "neonati", "baby", "infanzia", "prima infanzia"],
+      Mamma: ["mamma", "mamme", "premaman", "gravidanza", "maternita", "maternità", "allattamento"],
+      Casa: ["casa", "casalinghi", "detersivi", "pulizia", "bucato"],
+      Adulti: ["adulto", "adulti", "uomo", "donna", "profumeria", "farmaceutici", "elettromedicali"],
+      Animali: ["animale", "animali", "cane", "gatto", "pet"],
+    },
+    extraLikelyTerms: [
+      "sanitaria", "demma", "neonato", "neonati", "baby", "bimbi", "mamma", "pannolino",
+      "pannolini", "latte", "humana", "mellin", "hipp", "plasmon", "omogeneizzati", "salviette",
+      "biberon", "ciuccio", "puericultura", "premaman", "aerosol", "termometro", "pampers", "huggies",
+    ],
+  },
 };
 
 const COLOR_ALIASES = {
@@ -305,7 +169,25 @@ const COLOR_ALIASES = {
   grigio: ["grigio", "grigia", "grigi", "grigie", "grey", "gray"],
   giallo: ["giallo", "gialla", "yellow"],
   beige: ["beige", "sabbia", "sand"],
+  rosa: ["rosa", "pink"],
+  azzurro: ["azzurro", "azzurra", "celeste", "light blue"],
+  marrone: ["marrone", "brown"],
 };
+
+const BASE_STOPWORDS = new Set([
+  "fammi", "farmi", "vedere", "mostrami", "mostra", "cerco", "cerca", "voglio", "vorrei",
+  "dammi", "trovami", "trova", "hai", "avete", "mi", "serve", "servono", "puoi", "potresti",
+  "metti", "lista", "elenco", "articoli", "prodotti", "prodotto", "capi", "capo", "abbigliamento",
+  "moda", "outfit", "di", "da", "del", "della", "dello", "dei", "delle", "degli", "per",
+  "con", "in", "su", "che", "il", "lo", "la", "i", "gli", "le", "un", "una", "uno", "e", "o",
+  "a", "al", "alla", "allo", "ai", "agli", "alle", "sotto", "sopra", "meno", "piu", "più", "max",
+]);
+
+const catalogCaches = {};
+
+function getCatalogConfig(catalogKey = CATALOG_KEYS.NEWFORM) {
+  return CATALOG_CONFIGS[catalogKey] || CATALOG_CONFIGS[CATALOG_KEYS.NEWFORM];
+}
 
 function normalizeText(value) {
   return String(value || "")
@@ -374,7 +256,7 @@ function fuzzyEquals(a, b) {
   return distance <= threshold;
 }
 
-function getNgrams(tokens, maxSize = 3) {
+function getNgrams(tokens, maxSize = 4) {
   const out = [];
 
   for (let size = 1; size <= maxSize; size += 1) {
@@ -386,18 +268,27 @@ function getNgrams(tokens, maxSize = 3) {
   return out;
 }
 
-async function loadCatalogSnapshot() {
-  if (catalogCache) return catalogCache;
+async function loadCatalogSnapshot(catalogKey = CATALOG_KEYS.NEWFORM) {
+  const config = getCatalogConfig(catalogKey);
 
-  const res = await fetch("/catalog/catalog.json", { cache: "no-store" });
+  if (catalogCaches[catalogKey]) return catalogCaches[catalogKey];
+
+  const res = await fetch(config.path, { cache: "no-store" });
 
   if (!res.ok) {
-    throw new Error("Snapshot catalogo non raggiungibile");
+    throw new Error(`Snapshot catalogo ${config.name} non raggiungibile`);
   }
 
   const data = await res.json();
-  catalogCache = Array.isArray(data?.products) ? data.products : [];
-  return catalogCache;
+  const products = Array.isArray(data?.products) ? data.products : [];
+
+  catalogCaches[catalogKey] = products.map((product) => ({
+    ...product,
+    catalog_key: catalogKey,
+    catalog_name: config.name,
+  }));
+
+  return catalogCaches[catalogKey];
 }
 
 function getUniqueBrands(products) {
@@ -471,8 +362,8 @@ function resolveAlias(rawQuery, aliasMap, explicitValue = null) {
   return best || explicitValue || null;
 }
 
-function resolveCategory(rawQuery, products, explicitCategory = null) {
-  const aliasCategory = resolveAlias(rawQuery, CATEGORY_ALIASES, explicitCategory);
+function resolveCategory(rawQuery, products, config, explicitCategory = null) {
+  const aliasCategory = resolveAlias(rawQuery, config.categoryAliases, explicitCategory);
   if (aliasCategory) return aliasCategory;
 
   const categories = unique(
@@ -506,8 +397,8 @@ function resolveCategory(rawQuery, products, explicitCategory = null) {
   return best;
 }
 
-function resolveGender(rawQuery, explicitGender = null) {
-  return resolveAlias(rawQuery, GENDER_ALIASES, explicitGender);
+function resolveAudience(rawQuery, config, explicitAudience = null) {
+  return resolveAlias(rawQuery, config.audienceAliases, explicitAudience);
 }
 
 function resolveBrand(rawQuery, products, explicitBrand = null) {
@@ -523,7 +414,7 @@ function resolveBrand(rawQuery, products, explicitBrand = null) {
   for (const brand of brands) {
     const brandCompact = compactText(brand);
 
-    if (queryCompact.includes(brandCompact)) {
+    if (brandCompact && queryCompact.includes(brandCompact)) {
       return brand;
     }
   }
@@ -559,10 +450,13 @@ function resolveSize(rawQuery, explicitSize = null) {
     { regex: /\bM\b/, value: "M" },
     { regex: /\bL\b/, value: "L" },
     { regex: /\bS\b/, value: "S" },
+    { regex: /\bTG\.?\s*([0-9]+)\b/i, value: null },
+    { regex: /\bTAGLIA\s*([0-9]+)\b/i, value: null },
   ];
 
   for (const item of patterns) {
-    if (item.regex.test(text)) return item.value;
+    const match = text.match(item.regex);
+    if (match) return item.value || match[1];
   }
 
   return null;
@@ -576,6 +470,7 @@ function resolveAvailability(rawQuery, explicitAvailability = null) {
     text.includes("disponibile") ||
     text.includes("disponibili") ||
     text.includes("in stock") ||
+    text.includes("magazzino") ||
     text.includes("pronta consegna")
   ) {
     return "IN_STOCK";
@@ -620,7 +515,7 @@ function productMatchesColor(product, color) {
   if (!color) return true;
 
   const haystack = normalizeText(
-    `${product.name || ""} ${product.color_code || ""}`
+    `${product.name || ""} ${product.color_code || ""} ${product.description || ""}`
   );
 
   return getColorVariants(color).some((variant) =>
@@ -634,9 +529,23 @@ function getVariants(product) {
 
 function productMatchesSizeAndAvailability(product, size, availability) {
   const variants = getVariants(product);
+  const productAvailability = String(product.availability || "").toUpperCase();
+  const quantity = Number(product.available_quantity ?? product.quantity ?? NaN);
 
   if (!size && !availability) return true;
-  if (variants.length === 0) return false;
+
+  if (size && variants.length === 0) {
+    const haystack = normalizeText(`${product.name || ""} ${product.description || ""}`);
+    if (!haystack.includes(normalizeText(size))) return false;
+  }
+
+  if (availability && variants.length === 0) {
+    if (productAvailability === String(availability).toUpperCase()) return true;
+    if (availability === "IN_STOCK" && Number.isFinite(quantity) && quantity > 0) return true;
+    return false;
+  }
+
+  if (variants.length === 0) return true;
 
   return variants.some((variant) => {
     const sizeOk = size
@@ -656,13 +565,21 @@ function fuzzyTokenMatch(token, textTokens) {
   return textTokens.some((candidate) => fuzzyEquals(token, candidate));
 }
 
+function productMatchesAudience(product, audience) {
+  if (!audience) return true;
+
+  const haystack = normalizeText(
+    `${product.gender || ""} ${product.audience || ""} ${product.category || ""} ${product.name || ""}`
+  );
+
+  return haystack.includes(normalizeText(audience));
+}
+
 function scoreProduct(product, context) {
   let score = 0;
 
   const haystack = normalizeText(
-    `${product.name || ""} ${product.brand || ""} ${product.category || ""} ${
-      product.gender || ""
-    } ${product.color_code || ""}`
+    `${product.name || ""} ${product.brand || ""} ${product.category || ""} ${product.gender || ""} ${product.audience || ""} ${product.color_code || ""} ${product.description || ""}`
   );
   const haystackTokens = tokenize(haystack);
 
@@ -674,13 +591,13 @@ function scoreProduct(product, context) {
   if (context.category) {
     if (normalizeText(product.category) === normalizeText(context.category)) {
       score += 24;
+    } else if (haystack.includes(normalizeText(context.category))) {
+      score += 12;
     }
   }
 
-  if (context.gender) {
-    if (normalizeText(product.gender) === normalizeText(context.gender)) {
-      score += 14;
-    }
+  if (context.audience && productMatchesAudience(product, context.audience)) {
+    score += 14;
   }
 
   if (context.color && productMatchesColor(product, context.color)) {
@@ -715,34 +632,18 @@ function scoreProduct(product, context) {
   return score;
 }
 
-export function isLikelyCatalogQuery(text) {
+export function isLikelyCatalogQuery(text, catalogKey = CATALOG_KEYS.NEWFORM) {
+  const config = getCatalogConfig(catalogKey);
   const query = normalizeText(text);
   const tokens = tokenize(text);
   const grams = getNgrams(tokens, 4);
 
   const shoppingTerms = [
-    "new form",
-    "catalogo",
-    "catalog",
-    "negozio",
-    "shop",
-    "shopping",
-    "taglia",
-    "taglie",
-    "misura",
-    "misure",
-    "disponibile",
-    "disponibili",
-    "in stock",
-    "prezzo",
-    "euro",
-    "sconto",
-    "scontato",
-    "marca",
-    "brand",
-    ...GENERIC_CLOTHING_TERMS,
-    ...getAliasTerms(CATEGORY_ALIASES),
-    ...getAliasTerms(GENDER_ALIASES),
+    "catalogo", "catalog", "negozio", "shop", "shopping", "taglia", "taglie", "misura", "misure",
+    "disponibile", "disponibili", "in stock", "magazzino", "prezzo", "euro", "sconto", "scontato",
+    "marca", "brand", config.name, ...config.extraLikelyTerms,
+    ...getAliasTerms(config.categoryAliases),
+    ...getAliasTerms(config.audienceAliases),
     ...getAliasTerms(COLOR_ALIASES),
   ];
 
@@ -750,38 +651,22 @@ export function isLikelyCatalogQuery(text) {
     return true;
   }
 
-  const fuzzyTerms = [
-    ...getAliasTerms(CATEGORY_ALIASES),
-    ...getAliasTerms(GENDER_ALIASES),
-    "dsquared",
-    "tommy hilfiger",
-    "calvin klein",
-    "north sails",
-    "guess",
-    "vans",
-    "refrigue",
-    "refrigiwear",
-    "harmont blaine",
-    "liu jo",
-    "liu-jo",
-    "sun68",
-    "moschino",
-    "diesel",
-    "napapijri",
-  ].filter((term) => normalizeText(term).length >= 4);
+  const fuzzyTerms = shoppingTerms.filter((term) => normalizeText(term).length >= 4);
 
   return grams.some((gram) =>
     fuzzyTerms.some((term) => fuzzyEquals(gram, term))
   );
 }
 
-export async function searchCatalog(filters = {}) {
-  const products = await loadCatalogSnapshot();
+export async function searchCatalog(filters = {}, options = {}) {
+  const catalogKey = filters.catalogKey || options.catalogKey || CATALOG_KEYS.NEWFORM;
+  const config = getCatalogConfig(catalogKey);
+  const products = await loadCatalogSnapshot(catalogKey);
   const rawQuery = String(filters.raw_query || filters.q || "").trim();
 
   const brand = resolveBrand(rawQuery, products, filters.brand);
-  const category = resolveCategory(rawQuery, products, filters.category);
-  const gender = resolveGender(rawQuery, filters.gender);
+  const category = resolveCategory(rawQuery, products, config, filters.category);
+  const audience = resolveAudience(rawQuery, config, filters.gender || filters.audience);
   const color = resolveAlias(rawQuery, COLOR_ALIASES, filters.color);
   const size = resolveSize(rawQuery, filters.size);
   const availability = resolveAvailability(rawQuery, filters.availability);
@@ -791,15 +676,20 @@ export async function searchCatalog(filters = {}) {
     filters.max_price
   );
 
+  const stopwords = new Set([
+    ...BASE_STOPWORDS,
+    ...(config.stopwords || []),
+  ]);
+
   const queryTokens = tokenize(rawQuery).filter(
-    (token) => !STOPWORDS.has(token) && token.length > 1
+    (token) => !stopwords.has(token) && token.length > 1
   );
 
   const context = {
     rawQuery,
     brand,
     category,
-    gender,
+    audience,
     color,
     size,
     availability,
@@ -810,8 +700,15 @@ export async function searchCatalog(filters = {}) {
 
   let results = products.filter((product) => {
     if (brand && !fuzzyEquals(product.brand, brand)) return false;
-    if (category && normalizeText(product.category) !== normalizeText(category)) return false;
-    if (gender && normalizeText(product.gender) !== normalizeText(gender)) return false;
+
+    if (category) {
+      const productCategory = normalizeText(product.category);
+      const wantedCategory = normalizeText(category);
+      const productName = normalizeText(product.name);
+      if (productCategory !== wantedCategory && !productName.includes(wantedCategory)) return false;
+    }
+
+    if (audience && !productMatchesAudience(product, audience)) return false;
     if (color && !productMatchesColor(product, color)) return false;
 
     if (minPrice != null && Number(product.price) < Number(minPrice)) return false;
@@ -833,7 +730,7 @@ export async function searchCatalog(filters = {}) {
       const hasHardFilter =
         brand ||
         category ||
-        gender ||
+        audience ||
         color ||
         size ||
         availability ||
@@ -853,6 +750,13 @@ export async function searchCatalog(filters = {}) {
   return results;
 }
 
-export function clearCatalogCache() {
-  catalogCache = null;
+export function clearCatalogCache(catalogKey = null) {
+  if (catalogKey) {
+    catalogCaches[catalogKey] = null;
+    return;
+  }
+
+  Object.keys(catalogCaches).forEach((key) => {
+    catalogCaches[key] = null;
+  });
 }

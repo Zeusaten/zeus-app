@@ -1385,3 +1385,134 @@ a {
 .sidebar.closed .mode-switch-button {
   display: none;
 }
+
+/* =========================
+   Modalità Demma / Ted
+   ========================= */
+.mode-demma {
+  --bg-main: #fff8aa;
+  --panel: rgba(255, 255, 255, 0.88);
+  --panel-strong: rgba(255, 255, 255, 0.96);
+  --border: rgba(30, 130, 58, 0.16);
+  --shadow: 0 18px 50px rgba(72, 88, 24, 0.12);
+  --text: #1c2414;
+  --muted: #647041;
+  --accent-a: #13853a;
+  --accent-b: #ffdd28;
+  --accent-c: #e5202b;
+  --success-bg: rgba(19, 133, 58, 0.12);
+  --success-border: rgba(19, 133, 58, 0.22);
+  --success-text: #0b6d2d;
+  --user-bubble: linear-gradient(135deg, #13853a 0%, #0b6d2d 100%);
+  --user-text: #ffffff;
+  --assistant-bg: rgba(255, 255, 255, 0.96);
+  --assistant-border: rgba(19, 133, 58, 0.12);
+  background:
+    radial-gradient(circle at top left, rgba(255, 221, 40, 0.48), transparent 26%),
+    radial-gradient(circle at top right, rgba(19, 133, 58, 0.18), transparent 28%),
+    linear-gradient(180deg, #fff56c 0%, #fff8c7 48%, #f0ffe8 100%);
+}
+
+.mode-demma .sidebar {
+  background: rgba(255, 250, 179, 0.9);
+}
+
+.mode-demma .sidebar-card,
+.mode-demma .composer,
+.mode-demma .assistant-bubble {
+  background: rgba(255, 255, 255, 0.93);
+  border-color: rgba(19, 133, 58, 0.13);
+}
+
+.mode-demma .topbar {
+  background: rgba(255, 250, 179, 0.74);
+}
+
+.mode-demma .brand-title,
+.mode-demma .topbar-title,
+.mode-demma .assistant-markdown,
+.mode-demma .shopping-card-name {
+  color: #14220f;
+}
+
+.mode-demma .assistant-name {
+  color: #13853a;
+}
+
+.mode-demma .conversation-item.active {
+  border-color: rgba(19, 133, 58, 0.24);
+  background: linear-gradient(
+    135deg,
+    rgba(19, 133, 58, 0.1),
+    rgba(255, 221, 40, 0.22)
+  );
+}
+
+.mode-demma .new-chat-button {
+  background: linear-gradient(
+    135deg,
+    rgba(19, 133, 58, 0.12),
+    rgba(255, 221, 40, 0.26)
+  );
+  border: 1px solid rgba(19, 133, 58, 0.16);
+  color: #14220f;
+}
+
+.mode-demma .send-button {
+  background: linear-gradient(135deg, #13853a 0%, #0b6d2d 100%);
+  box-shadow: 0 12px 24px rgba(19, 133, 58, 0.22);
+}
+
+.mode-demma .web-badge,
+.mode-demma .shopping-card-link,
+.mode-demma .shopping-show-more,
+.mode-demma .shopping-rail-arrow,
+.mode-demma .source-link {
+  color: #0b6d2d;
+  background: rgba(19, 133, 58, 0.08);
+  border-color: rgba(19, 133, 58, 0.14);
+}
+
+.mode-demma .shopping-card {
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(19, 133, 58, 0.1);
+}
+
+.mode-demma .shopping-card:hover {
+  border-color: rgba(19, 133, 58, 0.24);
+}
+
+.mode-switch-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.demma-switch {
+  background: linear-gradient(135deg, #ffdd28 0%, #13853a 100%);
+  color: #14220f;
+}
+
+.mode-demma .zeus-switch {
+  background: rgba(255, 255, 255, 0.85);
+  color: #0b6d2d;
+  border-color: rgba(19, 133, 58, 0.14);
+}
+
+.mode-demma .newform-switch {
+  background: #211b19;
+  color: #ffffff;
+}
+
+.demma-brand-logo {
+  background: #fff56c;
+}
+
+.demma-assistant-avatar {
+  background: #fff56c;
+  border-color: rgba(19, 133, 58, 0.18);
+}
+
+.sidebar.closed .mode-switch-group {
+  display: none;
+}

@@ -36,6 +36,7 @@ const STORAGE_APP_MODE = "zeus_app_mode";
 const APP_MODES = {
   ZEUS: "zeus",
   NEWFORM: "newform",
+  DEMMA: "demma",
 };
 
 function createId() {
@@ -48,12 +49,15 @@ function createId() {
 
 function createWelcomeMessage(mode = APP_MODES.ZEUS) {
   const isNewForm = mode === APP_MODES.NEWFORM;
+  const isDemma = mode === APP_MODES.DEMMA;
 
   return {
     sender: "zeus",
-    text: isNewForm
-      ? "Ciao, sono Pino. Ti aiuto esclusivamente con il catalogo New Form. Puoi chiedermi prodotti per uomo, donna, bambino e bambina."
-      : "Ciao. Sono Zeus. Ti aiuto in italiano con idee, organizzazione, scrittura e ricerche online con fonti.",
+    text: isDemma
+      ? "Ciao, sono Ted. Ti aiuto esclusivamente con il catalogo Demma. Puoi chiedermi pannolini, prodotti baby, puericultura, alimentari, cosmetica, casa e molto altro."
+      : isNewForm
+        ? "Ciao, sono Pino. Ti aiuto esclusivamente con il catalogo New Form. Puoi chiedermi prodotti per uomo, donna, bambino e bambina."
+        : "Ciao. Sono Zeus. Ti aiuto in italiano con idee, organizzazione, scrittura e ricerche online con fonti.",
     grounded: false,
     searchQueries: [],
     sources: [],
@@ -106,7 +110,11 @@ function normalizeConversation(raw) {
     : [];
 
   const mode =
-    raw.mode === APP_MODES.NEWFORM ? APP_MODES.NEWFORM : APP_MODES.ZEUS;
+    raw.mode === APP_MODES.DEMMA
+      ? APP_MODES.DEMMA
+      : raw.mode === APP_MODES.NEWFORM
+        ? APP_MODES.NEWFORM
+        : APP_MODES.ZEUS;
 
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : createId(),
@@ -162,10 +170,24 @@ function MarkdownMessage({ text }) {
 }
 
 function ProductShoppingCard({ product }) {
-  const sizes =
-    Array.isArray(product.available_sizes) && product.available_sizes.length > 0
-      ? product.available_sizes.join(", ")
-      : "Nessuna taglia disponibile";
+  const hasSizes =
+    Array.isArray(product.available_sizes) && product.available_sizes.length > 0;
+
+  const sizes = hasSizes
+    ? product.available_sizes.join(", ")
+    : null;
+
+  const quantity = Number(product.available_quantity ?? product.quantity ?? NaN);
+  const availabilityText =
+    hasSizes
+      ? `Taglie: ${sizes}`
+      : Number.isFinite(quantity)
+        ? `Disponibilità: ${quantity > 0 ? `${quantity} in stock` : "Non disponibile"}`
+        : product.availability === "IN_STOCK"
+          ? "Disponibile"
+          : product.availability === "OUT_OF_STOCK"
+            ? "Non disponibile"
+            : "Disponibilità da verificare";
 
   const currentPrice =
     product.price != null ? `€${Number(product.price).toFixed(2)}` : null;
@@ -210,7 +232,7 @@ function ProductShoppingCard({ product }) {
           )}
         </div>
 
-        <div className="shopping-card-sizes">Taglie: {sizes}</div>
+        <div className="shopping-card-sizes">{availabilityText}</div>
 
         <div className="shopping-card-link">Apri prodotto</div>
       </div>
@@ -343,6 +365,14 @@ function ProductShoppingRail({ products }) {
 }
 
 function BrandLogo({ mode }) {
+  if (mode === APP_MODES.DEMMA) {
+    return (
+      <div className="brand-image-logo demma-brand-logo">
+        <img src="/demma-logo.png" alt="Demma logo" />
+      </div>
+    );
+  }
+
   if (mode === APP_MODES.NEWFORM) {
     return (
       <div className="brand-image-logo">
@@ -359,6 +389,14 @@ function BrandLogo({ mode }) {
 }
 
 function AssistantAvatar({ mode }) {
+  if (mode === APP_MODES.DEMMA) {
+    return (
+      <div className="assistant-avatar assistant-avatar-image demma-assistant-avatar">
+        <img src="/demma-chat-logo.png" alt="Ted Demma" />
+      </div>
+    );
+  }
+
   if (mode === APP_MODES.NEWFORM) {
     return (
       <div className="assistant-avatar assistant-avatar-image">
@@ -551,6 +589,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [appMode, setAppMode] = useState(() => {
     const saved = localStorage.getItem(STORAGE_APP_MODE);
+    if (saved === APP_MODES.DEMMA) return APP_MODES.DEMMA;
     return saved === APP_MODES.NEWFORM ? APP_MODES.NEWFORM : APP_MODES.ZEUS;
   });
 
@@ -579,19 +618,28 @@ function App() {
 
   const effectiveMode = currentConversation?.mode || appMode;
   const isNewFormMode = effectiveMode === APP_MODES.NEWFORM;
+  const isDemmaMode = effectiveMode === APP_MODES.DEMMA;
+  const isCatalogMode = isNewFormMode || isDemmaMode;
+  const activeCatalogKey = isDemmaMode ? "demma" : "newform";
 
-  const assistantName = isNewFormMode ? "Pino" : "Zeus";
-  const assistantSubtitle = isNewFormMode
-    ? "Assistente catalogo New Form"
-    : "AI personale";
+  const assistantName = isDemmaMode ? "Ted" : isNewFormMode ? "Pino" : "Zeus";
+  const assistantSubtitle = isDemmaMode
+    ? "Assistente catalogo Demma"
+    : isNewFormMode
+      ? "Assistente catalogo New Form"
+      : "AI personale";
 
-  const topbarSubtitle = isNewFormMode
-    ? "Catalogo New Form · ricerca prodotti"
-    : "Chat personale con memoria, ricerca e fonti";
+  const topbarSubtitle = isDemmaMode
+    ? "Catalogo Demma · ricerca prodotti"
+    : isNewFormMode
+      ? "Catalogo New Form · ricerca prodotti"
+      : "Chat personale con memoria, ricerca e fonti";
 
-  const composerPlaceholder = isNewFormMode
-    ? "Scrivi a Pino cosa cerchi nel catalogo New Form..."
-    : "Scrivi un messaggio a Zeus...";
+  const composerPlaceholder = isDemmaMode
+    ? "Scrivi a Ted cosa cerchi nel catalogo Demma..."
+    : isNewFormMode
+      ? "Scrivi a Pino cosa cerchi nel catalogo New Form..."
+      : "Scrivi un messaggio a Zeus...";
 
   const statusLabel = useMemo(() => {
     return getStatusLabel(statusText, isLoading, assistantName);
@@ -709,7 +757,12 @@ function App() {
   }
 
   function createNewChat(mode = effectiveMode) {
-    const title = mode === APP_MODES.NEWFORM ? "New Form" : "Nuova chat";
+    const title =
+      mode === APP_MODES.DEMMA
+        ? "Demma"
+        : mode === APP_MODES.NEWFORM
+          ? "New Form"
+          : "Nuova chat";
     const newConversation = createConversation(title, mode);
     setAppMode(mode);
     setConversations((prev) => [newConversation, ...prev]);
@@ -735,9 +788,24 @@ function App() {
     setStatusText("Pino è pronto");
   }
 
+  function switchToDemmaMode() {
+    setAppMode(APP_MODES.DEMMA);
+    const newConversation = createConversation("Demma", APP_MODES.DEMMA);
+    setConversations((prev) => [newConversation, ...prev]);
+    setActiveConversationId(newConversation.id);
+    setInput("");
+    setStatusText("Ted è pronto");
+  }
+
   function openConversation(conversation) {
     setActiveConversationId(conversation.id);
-    setAppMode(conversation.mode === APP_MODES.NEWFORM ? APP_MODES.NEWFORM : APP_MODES.ZEUS);
+    setAppMode(
+      conversation.mode === APP_MODES.DEMMA
+        ? APP_MODES.DEMMA
+        : conversation.mode === APP_MODES.NEWFORM
+          ? APP_MODES.NEWFORM
+          : APP_MODES.ZEUS
+    );
   }
 
   function deleteConversation(conversationId) {
@@ -914,11 +982,15 @@ function App() {
       products: [],
     };
 
-    const activeMode = isNewFormMode ? APP_MODES.NEWFORM : APP_MODES.ZEUS;
+    const activeMode = isDemmaMode
+      ? APP_MODES.DEMMA
+      : isNewFormMode
+        ? APP_MODES.NEWFORM
+        : APP_MODES.ZEUS;
     let updates = null;
     let updatedProfile = profile;
 
-    if (!isNewFormMode) {
+    if (!isCatalogMode) {
       updates = extractProfileUpdates(userText);
       updatedProfile = applyProfileUpdates(profile, updates);
 
@@ -935,6 +1007,7 @@ function App() {
       const shouldRename =
         conv.title === "Nuova chat" ||
         conv.title === "New Form" ||
+        conv.title === "Demma" ||
         userMessagesCount === 0;
 
       return {
@@ -949,27 +1022,34 @@ function App() {
     setInput("");
     setIsLoading(true);
     setStatusText(
-      isNewFormMode ? "Pino sta cercando nel catalogo..." : "Zeus sta scrivendo..."
+      isDemmaMode
+        ? "Ted sta cercando nel catalogo..."
+        : isNewFormMode
+          ? "Pino sta cercando nel catalogo..."
+          : "Zeus sta scrivendo..."
     );
 
     try {
-      if (isNewFormMode) {
+      if (isCatalogMode) {
         const filters = extractCatalogFilters(userText);
-        const results = await searchCatalog(filters);
+        const results = await searchCatalog(filters, { catalogKey: activeCatalogKey });
+        const catalogName = isDemmaMode ? "Demma" : "New Form";
 
         appendMessageToConversation(conversationId, {
           sender: "zeus",
           text:
             results.length > 0
-              ? `Ho trovato ${results.length} prodotti compatibili nel catalogo New Form. Ti lascio qui sotto le anteprime.`
-              : "Non ho trovato prodotti compatibili nel catalogo New Form. Prova a specificare meglio il tipo di capo, il reparto (uomo, donna, bambino, bambina), il brand, il colore, la taglia o il prezzo.",
+              ? `Ho trovato ${results.length} prodotti compatibili nel catalogo ${catalogName}. Ti lascio qui sotto le anteprime.`
+              : isDemmaMode
+                ? "Non ho trovato prodotti compatibili nel catalogo Demma. Prova a specificare meglio categoria, marca, prodotto, prezzo o disponibilità."
+                : "Non ho trovato prodotti compatibili nel catalogo New Form. Prova a specificare meglio il tipo di capo, il reparto (uomo, donna, bambino, bambina), il brand, il colore, la taglia o il prezzo.",
           grounded: true,
           searchQueries: [],
           sources: [],
           products: results,
         });
 
-        setStatusText("Pino è pronto");
+        setStatusText(isDemmaMode ? "Ted è pronto" : "Pino è pronto");
         return;
       }
 
@@ -1043,7 +1123,13 @@ function App() {
         products: [],
       });
 
-      setStatusText(isNewFormMode ? "Connessione a Pino non riuscita" : "Connessione a Zeus non riuscita");
+      setStatusText(
+        isDemmaMode
+          ? "Connessione a Ted non riuscita"
+          : isNewFormMode
+            ? "Connessione a Pino non riuscita"
+            : "Connessione a Zeus non riuscita"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1060,13 +1146,19 @@ function App() {
   }
 
   return (
-    <div className={`app-shell ${isNewFormMode ? "mode-newform" : "mode-zeus"}`}>
+    <div
+      className={`app-shell ${
+        isDemmaMode ? "mode-demma" : isNewFormMode ? "mode-newform" : "mode-zeus"
+      }`}
+    >
       <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
         <div className="sidebar-top">
           <div className="brand">
             <BrandLogo mode={effectiveMode} />
             <div className="brand-copy">
-              <div className="brand-title">{isNewFormMode ? "New Form" : "Zeus"}</div>
+              <div className="brand-title">
+                {isDemmaMode ? "Demma" : isNewFormMode ? "New Form" : "Zeus"}
+              </div>
               <div className="brand-subtitle">{assistantSubtitle}</div>
             </div>
           </div>
@@ -1088,37 +1180,53 @@ function App() {
           + Nuova chat
         </button>
 
-        {!isNewFormMode ? (
-          <button
-            className="mode-switch-button newform-switch"
-            type="button"
-            onClick={switchToNewFormMode}
-          >
-            New Form
-          </button>
-        ) : (
-          <button
-            className="mode-switch-button zeus-switch"
-            type="button"
-            onClick={switchToZeusMode}
-          >
-            ← Torna a Zeus
-          </button>
-        )}
+        <div className="mode-switch-group">
+          {!isNewFormMode && (
+            <button
+              className="mode-switch-button newform-switch"
+              type="button"
+              onClick={switchToNewFormMode}
+            >
+              New Form
+            </button>
+          )}
+
+          {!isDemmaMode && (
+            <button
+              className="mode-switch-button demma-switch"
+              type="button"
+              onClick={switchToDemmaMode}
+            >
+              Demma
+            </button>
+          )}
+
+          {isCatalogMode && (
+            <button
+              className="mode-switch-button zeus-switch"
+              type="button"
+              onClick={switchToZeusMode}
+            >
+              ← Torna a Zeus
+            </button>
+          )}
+        </div>
 
         <div className="sidebar-card">
           <div className="sidebar-card-label">Stato</div>
           <div className="status-pill">{statusLabel}</div>
         </div>
 
-        <div className="sidebar-card">
-          <div className="sidebar-card-label">Creatore</div>
-          <div className="creator-box">
-            {creatorName || "Non ancora memorizzato"}
+        {!isCatalogMode && (
+          <div className="sidebar-card">
+            <div className="sidebar-card-label">Creatore</div>
+            <div className="creator-box">
+              {creatorName || "Non ancora memorizzato"}
+            </div>
           </div>
-        </div>
+        )}
 
-        {!isNewFormMode && (
+        {!isCatalogMode && (
           <div className="sidebar-card">
             <div className="sidebar-card-label">Canva</div>
 
@@ -1427,7 +1535,7 @@ function App() {
           </div>
         </div>
 
-        {!isNewFormMode && (
+        {!isCatalogMode && (
           <div className="sidebar-card memory-card">
             <div className="sidebar-card-label">Memoria</div>
             <button
@@ -1496,7 +1604,9 @@ function App() {
                       {message.grounded && (
                         <div className="web-badge">
                           {message.products?.length > 0
-                            ? "Catalogo New Form"
+                            ? isDemmaMode
+                              ? "Catalogo Demma"
+                              : "Catalogo New Form"
                             : "Risposta verificata sul web"}
                         </div>
                       )}
