@@ -111,3 +111,55 @@ export async function getZeusAiReply(
     sources: Array.isArray(data.sources) ? data.sources : [],
   };
 }
+
+export async function getCatalogAiReply({
+  userText,
+  products = [],
+  catalogName = "catalogo",
+  assistantName = "Ted",
+  setStatusText,
+}) {
+  if (setStatusText) {
+    setStatusText(`${assistantName} sta ragionando sul catalogo...`);
+  }
+
+  const response = await fetchWithRetry(
+    `${API_BASE}/api/catalog/chat`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userText,
+        products: Array.isArray(products) ? products.slice(0, 40) : [],
+        catalogName,
+        assistantName,
+      }),
+    },
+    4,
+    60000
+  );
+
+  if (!response.ok) {
+    let errorText = `Il cervello catalogo di ${assistantName} non è raggiungibile in questo momento.`;
+
+    try {
+      const errorData = await response.json();
+      errorText = errorData.error || errorText;
+    } catch {
+      // ignore
+    }
+
+    throw new Error(errorText);
+  }
+
+  const data = await response.json();
+
+  return {
+    reply: data.reply || "Non sono riuscito a generare una risposta valida sul catalogo.",
+    grounded: false,
+    searchQueries: [],
+    sources: [],
+  };
+}

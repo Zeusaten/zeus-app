@@ -8,7 +8,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./styles.css";
-import { getZeusAiReply, loadZeusEngine } from "./services/zeusAiReply";
+import { getCatalogAiReply, getZeusAiReply, loadZeusEngine } from "./services/zeusAiReply";
 import {
   DEFAULT_PROFILE,
   applyProfileUpdates,
@@ -1034,15 +1034,37 @@ function App() {
         const filters = extractCatalogFilters(userText);
         const results = await searchCatalog(filters, { catalogKey: activeCatalogKey });
         const catalogName = isDemmaMode ? "Demma" : "New Form";
+        const catalogAssistantName = isDemmaMode ? "Ted" : "Pino";
+
+        let catalogReply =
+          results.length > 0
+            ? `Ho trovato ${results.length} prodotti compatibili nel catalogo ${catalogName}. Ti lascio qui sotto le anteprime.`
+            : isDemmaMode
+              ? "Non ho trovato prodotti compatibili nel catalogo Demma. Prova a specificare meglio categoria, marca, prodotto, prezzo o disponibilità."
+              : "Non ho trovato prodotti compatibili nel catalogo New Form. Prova a specificare meglio il tipo di capo, il reparto (uomo, donna, bambino, bambina), il brand, il colore, la taglia o il prezzo.";
+
+        if (results.length > 0) {
+          try {
+            const aiCatalogReply = await getCatalogAiReply({
+              userText,
+              products: results,
+              catalogName,
+              assistantName: catalogAssistantName,
+              setStatusText,
+            });
+
+            if (aiCatalogReply?.reply) {
+              catalogReply = aiCatalogReply.reply;
+            }
+          } catch (catalogBrainError) {
+            console.error(catalogBrainError);
+            catalogReply = `${catalogReply}\n\nNota: il ragionamento AI sul catalogo non è disponibile ora, quindi ti mostro comunque i prodotti trovati.`;
+          }
+        }
 
         appendMessageToConversation(conversationId, {
           sender: "zeus",
-          text:
-            results.length > 0
-              ? `Ho trovato ${results.length} prodotti compatibili nel catalogo ${catalogName}. Ti lascio qui sotto le anteprime.`
-              : isDemmaMode
-                ? "Non ho trovato prodotti compatibili nel catalogo Demma. Prova a specificare meglio categoria, marca, prodotto, prezzo o disponibilità."
-                : "Non ho trovato prodotti compatibili nel catalogo New Form. Prova a specificare meglio il tipo di capo, il reparto (uomo, donna, bambino, bambina), il brand, il colore, la taglia o il prezzo.",
+          text: catalogReply,
           grounded: false,
           searchQueries: [],
           sources: [],
