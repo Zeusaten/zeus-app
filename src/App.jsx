@@ -44,6 +44,7 @@ function createWelcomeMessage() {
     grounded: false,
     searchQueries: [],
     sources: [],
+    products: [],
   };
 }
 
@@ -79,6 +80,7 @@ function normalizeMessage(message) {
       ? message.searchQueries
       : [],
     sources: Array.isArray(message.sources) ? message.sources : [],
+    products: Array.isArray(message.products) ? message.products : [],
   };
 }
 
@@ -111,6 +113,7 @@ function normalizeAssistantPayload(payload) {
       grounded: false,
       searchQueries: [],
       sources: [],
+      products: [],
     };
   }
 
@@ -121,6 +124,7 @@ function normalizeAssistantPayload(payload) {
       ? payload.searchQueries
       : [],
     sources: Array.isArray(payload?.sources) ? payload.sources : [],
+    products: Array.isArray(payload?.products) ? payload.products : [],
   };
 }
 
@@ -136,6 +140,80 @@ function MarkdownMessage({ text }) {
     >
       {text}
     </ReactMarkdown>
+  );
+}
+
+function ProductShoppingCard({ product }) {
+  const sizes =
+    Array.isArray(product.available_sizes) && product.available_sizes.length > 0
+      ? product.available_sizes.join(", ")
+      : "Nessuna taglia disponibile";
+
+  const currentPrice =
+    product.price != null ? `€${Number(product.price).toFixed(2)}` : null;
+
+  const oldPrice =
+    product.old_price != null
+      ? `€${Number(product.old_price).toFixed(2)}`
+      : null;
+
+  return (
+    <a
+      href={product.url}
+      target="_blank"
+      rel="noreferrer"
+      className="shopping-card"
+    >
+      <div className="shopping-card-image-wrap">
+        {product.main_image ? (
+          <img
+            src={product.main_image}
+            alt={product.name}
+            className="shopping-card-image"
+            loading="lazy"
+          />
+        ) : (
+          <div className="shopping-card-image-placeholder">
+            Nessuna immagine
+          </div>
+        )}
+      </div>
+
+      <div className="shopping-card-body">
+        <div className="shopping-card-brand">{product.brand || "Brand"}</div>
+        <div className="shopping-card-name">{product.name}</div>
+
+        <div className="shopping-card-prices">
+          {currentPrice && (
+            <span className="shopping-card-price">{currentPrice}</span>
+          )}
+          {oldPrice && (
+            <span className="shopping-card-old-price">{oldPrice}</span>
+          )}
+        </div>
+
+        <div className="shopping-card-sizes">Taglie: {sizes}</div>
+
+        <div className="shopping-card-link">Apri prodotto</div>
+      </div>
+    </a>
+  );
+}
+
+function ProductShoppingRail({ products }) {
+  if (!Array.isArray(products) || products.length === 0) return null;
+
+  return (
+    <div className="shopping-rail-wrap">
+      <div className="shopping-rail" role="list" aria-label="Prodotti trovati">
+        {products.map((product) => (
+          <ProductShoppingCard
+            key={`${product.id}-${product.url}`}
+            product={product}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -394,23 +472,14 @@ function formatCatalogReply(results, filters) {
   if (filters.color) introParts.push(filters.color);
   if (filters.max_price) introParts.push(`max €${filters.max_price}`);
 
-  const intro = introParts.length
-    ? `Ho trovato questi prodotti (${introParts.join(", ")}):`
-    : "Ho trovato questi prodotti:";
+  const summary =
+    introParts.length > 0
+      ? `Ho trovato ${results.length} prodotti compatibili (${introParts.join(
+          ", "
+        )}).`
+      : `Ho trovato ${results.length} prodotti compatibili.`;
 
-  const lines = results.slice(0, 8).map((item) => {
-    const sizes =
-      Array.isArray(item.available_sizes) && item.available_sizes.length > 0
-        ? item.available_sizes.join(", ")
-        : "nessuna taglia disponibile";
-
-    const price =
-      item.price != null ? `€${item.price}` : "prezzo non disponibile";
-
-    return `- **${item.name}** — ${price} — taglie disponibili: ${sizes}\n  ${item.url}`;
-  });
-
-  return `${intro}\n\n${lines.join("\n\n")}`;
+  return `${summary}\n\nTi lascio qui sotto le anteprime dei prodotti.`;
 }
 
 function App() {
@@ -809,6 +878,7 @@ function App() {
     const userMessage = {
       sender: "user",
       text: userText,
+      products: [],
     };
 
     const updates = extractProfileUpdates(userText);
@@ -852,6 +922,7 @@ function App() {
           grounded: false,
           searchQueries: [],
           sources: [],
+          products: [],
         });
 
         setStatusText("Zeus è pronto");
@@ -868,6 +939,7 @@ function App() {
           grounded: true,
           searchQueries: [],
           sources: [],
+          products: results.slice(0, 10),
         });
 
         setStatusText("Zeus è pronto");
@@ -889,6 +961,7 @@ function App() {
         grounded: normalized.grounded,
         searchQueries: normalized.searchQueries,
         sources: normalized.sources,
+        products: [],
       });
 
       setStatusText("Zeus è pronto");
@@ -903,6 +976,7 @@ function App() {
         grounded: false,
         searchQueries: [],
         sources: [],
+        products: [],
       });
 
       setStatusText("Connessione a Zeus non riuscita");
@@ -1330,6 +1404,10 @@ function App() {
                       <div className="assistant-markdown">
                         <MarkdownMessage text={message.text} />
                       </div>
+
+                      {message.products?.length > 0 && (
+                        <ProductShoppingRail products={message.products} />
+                      )}
 
                       {message.grounded && (
                         <div className="web-badge">
