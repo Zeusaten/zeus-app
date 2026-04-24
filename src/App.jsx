@@ -31,6 +31,12 @@ const STORAGE_CONVERSATIONS = "zeus_conversations";
 const STORAGE_ACTIVE_CONVERSATION = "zeus_active_conversation";
 const STORAGE_PROFILE = "zeus_profile";
 const STORAGE_CANVA_LAST_DESIGN = "zeus_canva_last_design";
+const STORAGE_APP_MODE = "zeus_app_mode";
+
+const APP_MODES = {
+  ZEUS: "zeus",
+  NEWFORM: "newform",
+};
 
 function createId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -40,10 +46,14 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function createWelcomeMessage() {
+function createWelcomeMessage(mode = APP_MODES.ZEUS) {
+  const isNewForm = mode === APP_MODES.NEWFORM;
+
   return {
     sender: "zeus",
-    text: "Ciao. Sono Zeus. Ti aiuto in italiano con idee, organizzazione, scrittura e ricerche online con fonti.",
+    text: isNewForm
+      ? "Ciao, sono Pino. Ti aiuto esclusivamente con il catalogo New Form. Puoi chiedermi prodotti per uomo, donna, bambino e bambina."
+      : "Ciao. Sono Zeus. Ti aiuto in italiano con idee, organizzazione, scrittura e ricerche online con fonti.",
     grounded: false,
     searchQueries: [],
     sources: [],
@@ -51,7 +61,7 @@ function createWelcomeMessage() {
   };
 }
 
-function createConversation(title = "Nuova chat") {
+function createConversation(title = "Nuova chat", mode = APP_MODES.ZEUS) {
   const now = Date.now();
 
   return {
@@ -59,7 +69,8 @@ function createConversation(title = "Nuova chat") {
     title,
     createdAt: now,
     updatedAt: now,
-    messages: [createWelcomeMessage()],
+    mode,
+    messages: [createWelcomeMessage(mode)],
   };
 }
 
@@ -94,6 +105,9 @@ function normalizeConversation(raw) {
     ? raw.messages.map(normalizeMessage).filter(Boolean)
     : [];
 
+  const mode =
+    raw.mode === APP_MODES.NEWFORM ? APP_MODES.NEWFORM : APP_MODES.ZEUS;
+
   return {
     id: typeof raw.id === "string" && raw.id ? raw.id : createId(),
     title:
@@ -102,10 +116,11 @@ function normalizeConversation(raw) {
         : "Nuova chat",
     createdAt: typeof raw.createdAt === "number" ? raw.createdAt : Date.now(),
     updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : Date.now(),
+    mode,
     messages:
       normalizedMessages.length > 0
         ? normalizedMessages
-        : [createWelcomeMessage()],
+        : [createWelcomeMessage(mode)],
   };
 }
 
@@ -327,7 +342,15 @@ function ProductShoppingRail({ products }) {
   );
 }
 
-function ZeusLogo() {
+function BrandLogo({ mode }) {
+  if (mode === APP_MODES.NEWFORM) {
+    return (
+      <div className="brand-image-logo">
+        <img src="/newform-logo.png" alt="New Form logo" />
+      </div>
+    );
+  }
+
   return (
     <div className="zeus-logo">
       <div className="zeus-logo-core">Z</div>
@@ -335,11 +358,23 @@ function ZeusLogo() {
   );
 }
 
-function getStatusLabel(statusText, isLoading) {
+function AssistantAvatar({ mode }) {
+  if (mode === APP_MODES.NEWFORM) {
+    return (
+      <div className="assistant-avatar assistant-avatar-image">
+        <img src="/newform-logo.png" alt="Pino New Form" />
+      </div>
+    );
+  }
+
+  return <div className="assistant-avatar">Z</div>;
+}
+
+function getStatusLabel(statusText, isLoading, assistantName = "Zeus") {
   const lower = statusText.toLowerCase();
 
-  if (isLoading) return "Zeus sta scrivendo...";
-  if (lower.includes("pronto")) return "Zeus è pronto";
+  if (isLoading) return `${assistantName} sta scrivendo...`;
+  if (lower.includes("pronto")) return `${assistantName} è pronto`;
 
   if (
     lower.includes("riattivando") ||
@@ -347,10 +382,10 @@ function getStatusLabel(statusText, isLoading) {
     lower.includes("collegando") ||
     lower.includes("lento")
   ) {
-    return "Zeus si sta risvegliando...";
+    return `${assistantName} si sta risvegliando...`;
   }
 
-  if (lower.includes("connessione")) return "Connessione a Zeus non riuscita";
+  if (lower.includes("connessione")) return `Connessione a ${assistantName} non riuscita`;
 
   return statusText;
 }
@@ -514,6 +549,10 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [statusText, setStatusText] = useState("Sto preparando Zeus...");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [appMode, setAppMode] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_APP_MODE);
+    return saved === APP_MODES.NEWFORM ? APP_MODES.NEWFORM : APP_MODES.ZEUS;
+  });
 
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -538,9 +577,25 @@ function App() {
     return profile.creatorName || null;
   }, [profile.creatorName]);
 
+  const effectiveMode = currentConversation?.mode || appMode;
+  const isNewFormMode = effectiveMode === APP_MODES.NEWFORM;
+
+  const assistantName = isNewFormMode ? "Pino" : "Zeus";
+  const assistantSubtitle = isNewFormMode
+    ? "Assistente catalogo New Form"
+    : "AI personale";
+
+  const topbarSubtitle = isNewFormMode
+    ? "Catalogo New Form · ricerca prodotti"
+    : "Chat personale con memoria, ricerca e fonti";
+
+  const composerPlaceholder = isNewFormMode
+    ? "Scrivi a Pino cosa cerchi nel catalogo New Form..."
+    : "Scrivi un messaggio a Zeus...";
+
   const statusLabel = useMemo(() => {
-    return getStatusLabel(statusText, isLoading);
-  }, [statusText, isLoading]);
+    return getStatusLabel(statusText, isLoading, assistantName);
+  }, [statusText, isLoading, assistantName]);
 
   const refreshCanvaStatus = useCallback(async () => {
     try {
@@ -569,6 +624,10 @@ function App() {
       localStorage.setItem(STORAGE_ACTIVE_CONVERSATION, activeConversationId);
     }
   }, [activeConversationId]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_APP_MODE, appMode);
+  }, [appMode]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_PROFILE, JSON.stringify(profile));
@@ -649,11 +708,36 @@ function App() {
     }));
   }
 
-  function createNewChat() {
-    const newConversation = createConversation();
+  function createNewChat(mode = effectiveMode) {
+    const title = mode === APP_MODES.NEWFORM ? "New Form" : "Nuova chat";
+    const newConversation = createConversation(title, mode);
+    setAppMode(mode);
     setConversations((prev) => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
     setInput("");
+  }
+
+  function switchToZeusMode() {
+    setAppMode(APP_MODES.ZEUS);
+    const newConversation = createConversation("Nuova chat", APP_MODES.ZEUS);
+    setConversations((prev) => [newConversation, ...prev]);
+    setActiveConversationId(newConversation.id);
+    setInput("");
+    setStatusText("Zeus è pronto");
+  }
+
+  function switchToNewFormMode() {
+    setAppMode(APP_MODES.NEWFORM);
+    const newConversation = createConversation("New Form", APP_MODES.NEWFORM);
+    setConversations((prev) => [newConversation, ...prev]);
+    setActiveConversationId(newConversation.id);
+    setInput("");
+    setStatusText("Pino è pronto");
+  }
+
+  function openConversation(conversation) {
+    setActiveConversationId(conversation.id);
+    setAppMode(conversation.mode === APP_MODES.NEWFORM ? APP_MODES.NEWFORM : APP_MODES.ZEUS);
   }
 
   function deleteConversation(conversationId) {
@@ -830,11 +914,17 @@ function App() {
       products: [],
     };
 
-    const updates = extractProfileUpdates(userText);
-    const updatedProfile = applyProfileUpdates(profile, updates);
+    const activeMode = isNewFormMode ? APP_MODES.NEWFORM : APP_MODES.ZEUS;
+    let updates = null;
+    let updatedProfile = profile;
 
-    if (JSON.stringify(updatedProfile) !== JSON.stringify(profile)) {
-      setProfile(updatedProfile);
+    if (!isNewFormMode) {
+      updates = extractProfileUpdates(userText);
+      updatedProfile = applyProfileUpdates(profile, updates);
+
+      if (JSON.stringify(updatedProfile) !== JSON.stringify(profile)) {
+        setProfile(updatedProfile);
+      }
     }
 
     patchConversation(conversationId, (conv) => {
@@ -843,10 +933,13 @@ function App() {
       ).length;
 
       const shouldRename =
-        conv.title === "Nuova chat" || userMessagesCount === 0;
+        conv.title === "Nuova chat" ||
+        conv.title === "New Form" ||
+        userMessagesCount === 0;
 
       return {
         ...conv,
+        mode: activeMode,
         title: shouldRename ? getConversationTitle(userText) : conv.title,
         messages: [...conv.messages, userMessage],
         updatedAt: Date.now(),
@@ -855,9 +948,31 @@ function App() {
 
     setInput("");
     setIsLoading(true);
-    setStatusText("Zeus sta scrivendo...");
+    setStatusText(
+      isNewFormMode ? "Pino sta cercando nel catalogo..." : "Zeus sta scrivendo..."
+    );
 
     try {
+      if (isNewFormMode) {
+        const filters = extractCatalogFilters(userText);
+        const results = await searchCatalog(filters);
+
+        appendMessageToConversation(conversationId, {
+          sender: "zeus",
+          text:
+            results.length > 0
+              ? `Ho trovato ${results.length} prodotti compatibili nel catalogo New Form. Ti lascio qui sotto le anteprime.`
+              : "Non ho trovato prodotti compatibili nel catalogo New Form. Prova a specificare meglio il tipo di capo, il reparto (uomo, donna, bambino, bambina), il brand, il colore, la taglia o il prezzo.",
+          grounded: true,
+          searchQueries: [],
+          sources: [],
+          products: results,
+        });
+
+        setStatusText("Pino è pronto");
+        return;
+      }
+
       const deterministicReply = getDeterministicReply(
         userText,
         updatedProfile,
@@ -928,7 +1043,7 @@ function App() {
         products: [],
       });
 
-      setStatusText("Connessione a Zeus non riuscita");
+      setStatusText(isNewFormMode ? "Connessione a Pino non riuscita" : "Connessione a Zeus non riuscita");
     } finally {
       setIsLoading(false);
     }
@@ -945,14 +1060,14 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isNewFormMode ? "mode-newform" : "mode-zeus"}`}>
       <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
         <div className="sidebar-top">
           <div className="brand">
-            <ZeusLogo />
+            <BrandLogo mode={effectiveMode} />
             <div className="brand-copy">
-              <div className="brand-title">Zeus</div>
-              <div className="brand-subtitle">AI personale</div>
+              <div className="brand-title">{isNewFormMode ? "New Form" : "Zeus"}</div>
+              <div className="brand-subtitle">{assistantSubtitle}</div>
             </div>
           </div>
 
@@ -968,10 +1083,28 @@ function App() {
         <button
           className="new-chat-button"
           type="button"
-          onClick={createNewChat}
+          onClick={() => createNewChat(effectiveMode)}
         >
           + Nuova chat
         </button>
+
+        {!isNewFormMode ? (
+          <button
+            className="mode-switch-button newform-switch"
+            type="button"
+            onClick={switchToNewFormMode}
+          >
+            New Form
+          </button>
+        ) : (
+          <button
+            className="mode-switch-button zeus-switch"
+            type="button"
+            onClick={switchToZeusMode}
+          >
+            ← Torna a Zeus
+          </button>
+        )}
 
         <div className="sidebar-card">
           <div className="sidebar-card-label">Stato</div>
@@ -985,10 +1118,11 @@ function App() {
           </div>
         </div>
 
-        <div className="sidebar-card">
-          <div className="sidebar-card-label">Canva</div>
+        {!isNewFormMode && (
+          <div className="sidebar-card">
+            <div className="sidebar-card-label">Canva</div>
 
-          <div className="canva-status-row">
+            <div className="canva-status-row">
             <span
               className={`canva-dot ${
                 canvaStatus.connected ? "connected" : "disconnected"
@@ -1251,8 +1385,9 @@ function App() {
             </>
           )}
 
-          {canvaError && <div className="canva-error">{canvaError}</div>}
-        </div>
+            {canvaError && <div className="canva-error">{canvaError}</div>}
+          </div>
+        )}
 
         <div className="sidebar-card conversations-card">
           <div className="sidebar-card-label">Conversazioni</div>
@@ -1268,7 +1403,7 @@ function App() {
                 <button
                   type="button"
                   className="conversation-main"
-                  onClick={() => setActiveConversationId(conversation.id)}
+                  onClick={() => openConversation(conversation)}
                 >
                   <div className="conversation-item-title">
                     {conversation.title}
@@ -1292,16 +1427,18 @@ function App() {
           </div>
         </div>
 
-        <div className="sidebar-card memory-card">
-          <div className="sidebar-card-label">Memoria</div>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={resetMemory}
-          >
-            Azzera memoria di Zeus
-          </button>
-        </div>
+        {!isNewFormMode && (
+          <div className="sidebar-card memory-card">
+            <div className="sidebar-card-label">Memoria</div>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={resetMemory}
+            >
+              Azzera memoria di Zeus
+            </button>
+          </div>
+        )}
       </aside>
 
       <main className="main-panel">
@@ -1318,9 +1455,7 @@ function App() {
             <div className="topbar-title">
               {currentConversation?.title || "Zeus"}
             </div>
-            <div className="topbar-subtitle">
-              Chat personale con memoria, ricerca e fonti
-            </div>
+            <div className="topbar-subtitle">{topbarSubtitle}</div>
           </div>
         </header>
 
@@ -1335,7 +1470,7 @@ function App() {
               >
                 {message.sender === "zeus" && (
                   <div className="assistant-avatar-wrap">
-                    <div className="assistant-avatar">Z</div>
+                    <AssistantAvatar mode={effectiveMode} />
                   </div>
                 )}
 
@@ -1348,7 +1483,7 @@ function App() {
                 >
                   {message.sender === "zeus" ? (
                     <>
-                      <div className="assistant-name">Zeus</div>
+                      <div className="assistant-name">{assistantName}</div>
 
                       <div className="assistant-markdown">
                         <MarkdownMessage text={message.text} />
@@ -1360,7 +1495,9 @@ function App() {
 
                       {message.grounded && (
                         <div className="web-badge">
-                          Risposta verificata sul web
+                          {message.products?.length > 0
+                            ? "Catalogo New Form"
+                            : "Risposta verificata sul web"}
                         </div>
                       )}
 
@@ -1394,11 +1531,11 @@ function App() {
             {isLoading && (
               <div className="message-row assistant-row">
                 <div className="assistant-avatar-wrap">
-                  <div className="assistant-avatar">Z</div>
+                  <AssistantAvatar mode={effectiveMode} />
                 </div>
 
                 <div className="message-bubble assistant-bubble">
-                  <div className="assistant-name">Zeus</div>
+                  <div className="assistant-name">{assistantName}</div>
                   <div className="typing-dots">
                     <span></span>
                     <span></span>
@@ -1416,7 +1553,7 @@ function App() {
           <form className="composer" onSubmit={handleSend}>
             <textarea
               ref={textareaRef}
-              placeholder="Scrivi un messaggio a Zeus..."
+              placeholder={composerPlaceholder}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}

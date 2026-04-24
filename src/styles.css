@@ -1229,3 +1229,159 @@ a {
     height: 96px;
   }
 }
+/* =========================
+   Modalità New Form / Pino
+   ========================= */
+.mode-newform {
+  --bg-main: #f4f1ee;
+  --panel: rgba(255, 255, 255, 0.9);
+  --panel-strong: rgba(255, 255, 255, 0.96);
+  --border: rgba(34, 27, 25, 0.12);
+  --shadow: 0 18px 50px rgba(32, 24, 22, 0.08);
+  --text: #1e1716;
+  --muted: #6e625d;
+  --accent-a: #1f1716;
+  --accent-b: #3a2d2a;
+  --accent-c: #b9a89c;
+  --success-bg: rgba(31, 23, 22, 0.08);
+  --success-border: rgba(31, 23, 22, 0.14);
+  --success-text: #1f1716;
+  --user-bubble: linear-gradient(135deg, #1f1716 0%, #3a2d2a 100%);
+  --user-text: #ffffff;
+  --assistant-bg: rgba(255, 255, 255, 0.96);
+  --assistant-border: rgba(31, 23, 22, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(185, 168, 156, 0.16), transparent 22%),
+    radial-gradient(circle at top right, rgba(31, 23, 22, 0.08), transparent 28%),
+    linear-gradient(180deg, #f6f2ef 0%, #efe8e3 100%);
+}
+
+.mode-newform .sidebar {
+  background: rgba(247, 243, 240, 0.92);
+}
+
+.mode-newform .sidebar-card,
+.mode-newform .composer,
+.mode-newform .assistant-bubble {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(31, 23, 22, 0.1);
+}
+
+.mode-newform .topbar {
+  background: rgba(247, 243, 240, 0.72);
+}
+
+.mode-newform .brand-title,
+.mode-newform .topbar-title,
+.mode-newform .assistant-markdown,
+.mode-newform .shopping-card-name {
+  color: #1f1716;
+}
+
+.mode-newform .assistant-name {
+  color: #1f1716;
+}
+
+.mode-newform .conversation-item.active {
+  border-color: rgba(31, 23, 22, 0.18);
+  background: linear-gradient(
+    135deg,
+    rgba(31, 23, 22, 0.08),
+    rgba(185, 168, 156, 0.12)
+  );
+}
+
+.mode-newform .new-chat-button {
+  background: linear-gradient(
+    135deg,
+    rgba(31, 23, 22, 0.08),
+    rgba(185, 168, 156, 0.18)
+  );
+  border: 1px solid rgba(31, 23, 22, 0.12);
+  color: #1f1716;
+}
+
+.mode-newform .send-button {
+  background: linear-gradient(135deg, #1f1716 0%, #3a2d2a 100%);
+  box-shadow: 0 12px 24px rgba(31, 23, 22, 0.18);
+}
+
+.mode-newform .web-badge,
+.mode-newform .shopping-card-link,
+.mode-newform .shopping-show-more,
+.mode-newform .shopping-rail-arrow,
+.mode-newform .source-link {
+  color: #1f1716;
+  background: rgba(31, 23, 22, 0.08);
+  border-color: rgba(31, 23, 22, 0.12);
+}
+
+.mode-newform .shopping-card {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(31, 23, 22, 0.1);
+}
+
+.mode-newform .shopping-card:hover {
+  border-color: rgba(31, 23, 22, 0.22);
+}
+
+.brand-image-logo {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 25px rgba(31, 23, 22, 0.12);
+}
+
+.brand-image-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.assistant-avatar-image {
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(31, 23, 22, 0.08);
+}
+
+.assistant-avatar-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mode-switch-button {
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 16px;
+  box-shadow: var(--shadow);
+}
+
+.newform-switch {
+  background: linear-gradient(135deg, #1f1716 0%, #3b2d2a 100%);
+  color: #ffffff;
+}
+
+.zeus-switch {
+  background: linear-gradient(
+    135deg,
+    rgba(93, 112, 255, 0.14),
+    rgba(122, 92, 255, 0.14)
+  );
+  color: #24304f;
+}
+
+.sidebar.closed .mode-switch-button {
+  display: none;
+}

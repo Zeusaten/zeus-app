@@ -15,6 +15,21 @@ const STOPWORDS = new Set([
   "trova",
   "hai",
   "avete",
+  "mi",
+  "serve",
+  "servono",
+  "puoi",
+  "potresti",
+  "metti",
+  "lista",
+  "elenco",
+  "articoli",
+  "prodotti",
+  "capi",
+  "capo",
+  "abbigliamento",
+  "moda",
+  "outfit",
   "di",
   "da",
   "del",
@@ -36,29 +51,249 @@ const STOPWORDS = new Set([
   "le",
   "un",
   "una",
+  "uno",
+  "e",
+  "o",
+  "a",
+  "al",
+  "alla",
+  "allo",
+  "ai",
+  "agli",
+  "alle",
   "uomo",
+  "uomini",
   "donna",
+  "donne",
   "bambino",
+  "bambini",
   "bambina",
+  "bambine",
 ]);
 
+const GENERIC_CLOTHING_TERMS = [
+  "abbigliamento",
+  "capo",
+  "capi",
+  "vestiti",
+  "moda",
+  "outfit",
+  "look",
+  "articolo",
+  "articoli",
+  "prodotto",
+  "prodotti",
+];
+
 const CATEGORY_ALIASES = {
-  Tshirt: ["tshirt", "t-shirt", "t shirt", "maglietta", "magliette", "tee"],
-  Pantaloni: ["pantalone", "pantaloni", "trousers", "cargo"],
-  Felpa: ["felpa", "felpe", "hoodie", "sweatshirt"],
-  Scarpe: ["scarpa", "scarpe", "sneaker", "sneakers"],
-  Polo: ["polo"],
-  Camicia: ["camicia", "camicie", "shirt"],
-  Giacca: ["giacca", "giacche", "jacket"],
-  Jeans: ["jeans", "denim"],
-  Costume: ["costume", "costumi", "swimwear", "boxer mare", "slip mare"],
+  Tshirt: [
+    "tshirt",
+    "t-shirt",
+    "t shirt",
+    "tee",
+    "tee shirt",
+    "maglietta",
+    "magliette",
+    "maglia manica corta",
+    "maglie manica corta",
+  ],
+  Maglie: [
+    "maglia",
+    "maglie",
+    "maglione",
+    "maglioni",
+    "pullover",
+    "lupetto",
+    "dolcevita",
+    "cardigan",
+    "sweater",
+    "knitwear",
+  ],
+  Felpe: [
+    "felpa",
+    "felpe",
+    "hoodie",
+    "hoodies",
+    "sweatshirt",
+    "felpa cappuccio",
+    "felpa con cappuccio",
+    "felpa girocollo",
+  ],
+  Camicie: [
+    "camicia",
+    "camicie",
+    "shirt",
+    "shirts",
+    "camicia elegante",
+    "camicia casual",
+  ],
+  Bluse: ["blusa", "bluse", "blouse", "blouses"],
+  Polo: ["polo", "polo shirt", "polo manica corta", "polo manica lunga"],
+  Top: ["top", "canotta", "canotte", "tank top", "crop top", "body", "bodysuit"],
+  Pantaloni: [
+    "pantalone",
+    "pantaloni",
+    "trousers",
+    "pants",
+    "cargo",
+    "chino",
+    "chinos",
+    "jogger",
+    "joggers",
+    "pantaloni eleganti",
+    "pantaloni casual",
+  ],
+  Jeans: ["jeans", "jean", "denim", "pantaloni jeans"],
+  Shorts: ["short", "shorts", "bermuda", "bermudas", "pantaloncino", "pantaloncini"],
+  Leggings: ["leggings", "legging", "fuseaux"],
+  Gonne: ["gonna", "gonne", "skirt", "skirts", "minigonna", "minigonne"],
+  Abiti: ["abito", "abiti", "vestito", "dress", "dresses", "tubino"],
+  Tute: ["tuta", "tute", "tracksuit", "jumpsuit", "completo tuta"],
+  Giacche: ["giacca", "giacche", "jacket", "jackets", "blazer", "giacca leggera"],
+  Giubbotti: [
+    "giubbotto",
+    "giubbotti",
+    "piumino",
+    "piumini",
+    "bomber",
+    "parka",
+    "cappotto",
+    "cappotti",
+    "coat",
+    "coats",
+    "outerwear",
+    "giaccone",
+    "kway",
+    "k-way",
+  ],
+  Gilet: ["gilet", "smanicato", "smanicati", "vest", "panciotto"],
+  Scarpe: [
+    "scarpa",
+    "scarpe",
+    "sneaker",
+    "sneakers",
+    "tennis",
+    "calzatura",
+    "calzature",
+    "stivale",
+    "stivali",
+    "mocassino",
+    "mocassini",
+    "sandalo",
+    "sandali",
+    "scarpe da ginnastica",
+    "scarpe ginnastica",
+  ],
+  Ciabatte: ["ciabatta", "ciabatte", "slipper", "slippers", "infradito", "flip flop", "slides"],
+  "Costumi mare": [
+    "costume",
+    "costumi",
+    "costume mare",
+    "costumi mare",
+    "costume da bagno",
+    "costumi da bagno",
+    "boxer mare",
+    "boxer da mare",
+    "slip mare",
+    "slip da mare",
+    "swimwear",
+    "bikini",
+    "trikini",
+  ],
+  "Telo mare": ["telo mare", "telo da mare", "asciugamano mare", "beach towel"],
+  "Teli mare": ["teli mare", "teli da mare", "asciugamani mare"],
+  Intimo: ["intimo", "mutanda", "mutande", "boxer", "slip", "reggiseno", "reggiseni", "bralette", "underwear"],
+  Calze: ["calza", "calze", "calzino", "calzini", "socks", "sock"],
+  Borse: [
+    "borsa",
+    "borse",
+    "bag",
+    "bags",
+    "borsetta",
+    "borsette",
+    "tracolla",
+    "tracolle",
+    "shopping bag",
+    "shopper",
+    "pochette",
+    "clutch",
+    "marsupio",
+    "marsupi",
+  ],
+  Zaini: ["zaino", "zaini", "backpack", "backpacks"],
+  Portafogli: ["portafoglio", "portafogli", "wallet", "wallets", "portacarte", "porta carte", "card holder"],
+  Cinture: ["cintura", "cinture", "belt", "belts"],
+  Cappelli: ["cappello", "cappelli", "berretto", "berretti", "cappellino", "cappellini", "cap", "caps", "hat", "hats", "beanie"],
+  Sciarpe: ["sciarpa", "sciarpe", "foulard", "stola", "scarf", "scarves"],
+  Cravatte: ["cravatta", "cravatte", "tie", "ties"],
+  Papillon: ["papillon", "bow tie", "farfallino"],
+  Bracciali: ["bracciale", "bracciali", "bracelet", "bracelets"],
+  Orologi: ["orologio", "orologi", "watch", "watches"],
+  Portachiavi: ["portachiavi", "porta chiavi", "keychain", "key ring"],
+  Accessori: ["accessorio", "accessori", "accessory", "accessories"],
 };
 
 const GENDER_ALIASES = {
-  Uomo: ["uomo", "uomini", "man", "men", "maschio"],
-  Donna: ["donna", "donne", "woman", "women", "femmina"],
-  Bambino: ["bambino", "bambini", "boy", "boys"],
-  Bambina: ["bambina", "bambine", "girl", "girls"],
+  Uomo: [
+    "uomo",
+    "uomini",
+    "da uomo",
+    "per uomo",
+    "adulto uomo",
+    "maschile",
+    "maschio",
+    "signore",
+    "signori",
+    "man",
+    "men",
+    "male",
+  ],
+  Donna: [
+    "donna",
+    "donne",
+    "da donna",
+    "per donna",
+    "adulta donna",
+    "femminile",
+    "femmina",
+    "signora",
+    "signore donna",
+    "woman",
+    "women",
+    "female",
+  ],
+  Bambino: [
+    "bambino",
+    "bambini",
+    "bimbo",
+    "bimbi",
+    "da bambino",
+    "per bambino",
+    "maschietto",
+    "neonato",
+    "junior maschio",
+    "ragazzino",
+    "ragazzini",
+    "boy",
+    "boys",
+    "kid boy",
+  ],
+  Bambina: [
+    "bambina",
+    "bambine",
+    "bimba",
+    "bimbe",
+    "da bambina",
+    "per bambina",
+    "femminuccia",
+    "neonata",
+    "junior femmina",
+    "ragazzina",
+    "ragazzine",
+    "girl",
+    "girls",
+    "kid girl",
+  ],
 };
 
 const COLOR_ALIASES = {
@@ -174,36 +409,105 @@ function getUniqueBrands(products) {
   );
 }
 
+function getAliasTerms(aliasMap) {
+  return Object.entries(aliasMap).flatMap(([canonical, aliases]) => [
+    canonical,
+    ...aliases,
+  ]);
+}
+
 function resolveAlias(rawQuery, aliasMap, explicitValue = null) {
   const query = normalizeText(rawQuery);
-  const grams = getNgrams(tokenize(rawQuery), 3);
+  const grams = getNgrams(tokenize(rawQuery), 4);
 
   if (explicitValue) {
+    let explicitBest = null;
+    let explicitScore = 0;
+
     for (const [canonical, aliases] of Object.entries(aliasMap)) {
-      if (fuzzyEquals(explicitValue, canonical)) return canonical;
-      if (aliases.some((alias) => fuzzyEquals(explicitValue, alias))) {
-        return canonical;
+      const variants = [canonical, ...aliases];
+
+      for (const variant of variants) {
+        if (fuzzyEquals(explicitValue, variant)) {
+          const score = normalizeText(variant).length + 100;
+          if (score > explicitScore) {
+            explicitBest = canonical;
+            explicitScore = score;
+          }
+        }
       }
     }
+
+    if (explicitBest) return explicitBest;
   }
+
+  let best = null;
+  let bestScore = 0;
 
   for (const [canonical, aliases] of Object.entries(aliasMap)) {
     const variants = [canonical, ...aliases];
 
     for (const variant of variants) {
       const normalizedVariant = normalizeText(variant);
+      if (!normalizedVariant) continue;
+
+      let score = 0;
 
       if (query.includes(normalizedVariant)) {
-        return canonical;
+        score = normalizedVariant.length + 50;
       }
 
       if (grams.some((gram) => fuzzyEquals(gram, variant))) {
-        return canonical;
+        score = Math.max(score, normalizedVariant.length + 20);
+      }
+
+      if (score > bestScore) {
+        best = canonical;
+        bestScore = score;
       }
     }
   }
 
-  return explicitValue || null;
+  return best || explicitValue || null;
+}
+
+function resolveCategory(rawQuery, products, explicitCategory = null) {
+  const aliasCategory = resolveAlias(rawQuery, CATEGORY_ALIASES, explicitCategory);
+  if (aliasCategory) return aliasCategory;
+
+  const categories = unique(
+    products
+      .map((p) => String(p.category || "").trim())
+      .filter(Boolean)
+  );
+  const query = normalizeText(rawQuery);
+  const grams = getNgrams(tokenize(rawQuery), 4);
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const category of categories) {
+    const normalizedCategory = normalizeText(category);
+
+    let score = 0;
+    if (query.includes(normalizedCategory)) {
+      score = normalizedCategory.length + 40;
+    }
+    if (grams.some((gram) => fuzzyEquals(gram, category))) {
+      score = Math.max(score, normalizedCategory.length + 15);
+    }
+
+    if (score > bestScore) {
+      best = category;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+function resolveGender(rawQuery, explicitGender = null) {
+  return resolveAlias(rawQuery, GENDER_ALIASES, explicitGender);
 }
 
 function resolveBrand(rawQuery, products, explicitBrand = null) {
@@ -414,71 +718,41 @@ function scoreProduct(product, context) {
 export function isLikelyCatalogQuery(text) {
   const query = normalizeText(text);
   const tokens = tokenize(text);
-  const grams = getNgrams(tokens, 3);
+  const grams = getNgrams(tokens, 4);
 
   const shoppingTerms = [
     "new form",
     "catalogo",
     "catalog",
-    "maglietta",
-    "magliette",
-    "tshirt",
-    "t shirt",
-    "t-shirt",
-    "pantalone",
-    "pantaloni",
-    "felpa",
-    "felpe",
-    "scarpa",
-    "scarpe",
-    "sneaker",
-    "sneakers",
-    "camicia",
-    "camicie",
-    "giacca",
-    "giacche",
-    "jeans",
-    "polo",
-    "costume",
-    "costumi",
+    "negozio",
+    "shop",
+    "shopping",
     "taglia",
+    "taglie",
+    "misura",
+    "misure",
     "disponibile",
     "disponibili",
+    "in stock",
     "prezzo",
     "euro",
+    "sconto",
+    "scontato",
     "marca",
     "brand",
-    "nero",
-    "nera",
-    "bianco",
-    "bianca",
-    "blu",
-    "verde",
-    "rosso",
-    "rossa",
-    "grigio",
-    "grigia",
-    "uomo",
-    "donna",
-    "bambino",
-    "bambina",
-    "dsquared",
-    "tommy",
-    "hilfiger",
-    "calvin",
-    "klein",
-    "guess",
-    "vans",
-    "refrigue",
-    "harmont",
-    "blaine",
+    ...GENERIC_CLOTHING_TERMS,
+    ...getAliasTerms(CATEGORY_ALIASES),
+    ...getAliasTerms(GENDER_ALIASES),
+    ...getAliasTerms(COLOR_ALIASES),
   ];
 
   if (shoppingTerms.some((term) => query.includes(normalizeText(term)))) {
     return true;
   }
 
-  const fuzzyBrands = [
+  const fuzzyTerms = [
+    ...getAliasTerms(CATEGORY_ALIASES),
+    ...getAliasTerms(GENDER_ALIASES),
     "dsquared",
     "tommy hilfiger",
     "calvin klein",
@@ -486,11 +760,18 @@ export function isLikelyCatalogQuery(text) {
     "guess",
     "vans",
     "refrigue",
+    "refrigiwear",
     "harmont blaine",
-  ];
+    "liu jo",
+    "liu-jo",
+    "sun68",
+    "moschino",
+    "diesel",
+    "napapijri",
+  ].filter((term) => normalizeText(term).length >= 4);
 
   return grams.some((gram) =>
-    fuzzyBrands.some((brand) => fuzzyEquals(gram, brand))
+    fuzzyTerms.some((term) => fuzzyEquals(gram, term))
   );
 }
 
@@ -499,8 +780,8 @@ export async function searchCatalog(filters = {}) {
   const rawQuery = String(filters.raw_query || filters.q || "").trim();
 
   const brand = resolveBrand(rawQuery, products, filters.brand);
-  const category = resolveAlias(rawQuery, CATEGORY_ALIASES, filters.category);
-  const gender = resolveAlias(rawQuery, GENDER_ALIASES, filters.gender);
+  const category = resolveCategory(rawQuery, products, filters.category);
+  const gender = resolveGender(rawQuery, filters.gender);
   const color = resolveAlias(rawQuery, COLOR_ALIASES, filters.color);
   const size = resolveSize(rawQuery, filters.size);
   const availability = resolveAvailability(rawQuery, filters.availability);
@@ -550,7 +831,14 @@ export async function searchCatalog(filters = {}) {
       if (!rawQuery) return true;
 
       const hasHardFilter =
-        brand || category || gender || color || size || availability || minPrice != null || maxPrice != null;
+        brand ||
+        category ||
+        gender ||
+        color ||
+        size ||
+        availability ||
+        minPrice != null ||
+        maxPrice != null;
 
       if (hasHardFilter) return true;
 
