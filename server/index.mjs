@@ -526,6 +526,114 @@ Continua adesso:
   };
 }
 
+
+function compactCatalogProducts(products = [], maxItems = 40) {
+  if (!Array.isArray(products)) return [];
+
+  return products.slice(0, maxItems).map((product, index) => ({
+    n: index + 1,
+    name: product?.name || "",
+    brand: product?.brand || "",
+    category: product?.category || "",
+    price: product?.price ?? null,
+    old_price: product?.old_price ?? null,
+    currency: product?.currency || "EUR",
+    availability: product?.availability || "",
+    available_sizes: Array.isArray(product?.available_sizes)
+      ? product.available_sizes.slice(0, 12)
+      : [],
+    url: product?.url || "",
+  }));
+}
+
+async function callGeminiNoSearchWithRetry(prompt, maxOutputTokens = 900) {
+  const modelsToTry = [model, fallbackModel].filter(Boolean);
+  let lastError = null;
+
+  for (const currentModel of modelsToTry) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await generateGeminiResponse(
+          currentModel,
+          prompt,
+          maxOutputTokens,
+          false
+        );
+      } catch (error) {
+        lastError = error;
+
+        if (isQuotaExceededError(error)) {
+          console.warn(
+            `Quota esaurita sul modello ${currentModel}, provo il modello successivo se disponibile.`
+          );
+          break;
+        }
+
+        if (!isRetryableGeminiError(error)) {
+          throw error;
+        }
+
+        const waitMs = 2500 * (attempt + 1);
+        console.warn(
+          `Catalog brain: modello ${currentModel} occupato, tentativo ${attempt + 1}/4. Attendo ${waitMs}ms`
+        );
+        await sleep(waitMs);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+function buildCatalogBrainPrompt({
+  assistantName = "Ted",
+  catalogName = "catalogo",
+  userText,
+  products = [],
+}) {
+  const compactProducts = compactCatalogProducts(products, 40);
+
+  return `
+Ti chiami ${assistantName}.
+Sei un assistente commerciale chiuso al catalogo ${catalogName}.
+
+REGOLE NON NEGOZIABILI:
+- Devi rispondere solo usando i prodotti forniti nella sezione PRODOTTI_CATALOGO.
+- Non usare conoscenza esterna.
+- Non usare il web.
+- Non inventare prodotti, prezzi, disponibilità, formati o caratteristiche non presenti nei dati.
+- Se i prodotti non bastano per rispondere bene, dillo chiaramente e chiedi un dettaglio utile.
+- Se l'utente chiede consigli medici o sanitari, non fare diagnosi e non dare terapia: limitati a proporre prodotti pertinenti del catalogo e consiglia di chiedere a un professionista.
+- Rispondi in italiano, in modo naturale, breve ma utile.
+- Cita i prodotti per nome esatto.
+- Quando utile, raggruppa per bisogno: economico, baby, casa, alimentare, igiene, ecc.
+- Non dire che hai cercato sul web.
+- Non dire che hai fonti web.
+- Non mostrare link grezzi se non necessario: le card prodotto saranno già sotto la risposta.
+
+PRODOTTI_CATALOGO_JSON:
+${JSON.stringify(compactProducts, null, 2)}
+
+DOMANDA_UTENTE:
+${userText}
+
+Rispondi ora come ${assistantName}, usando solo PRODOTTI_CATALOGO_JSON.
+`;
+}
+
+async function generateCatalogBrainReply(payload) {
+  const prompt = buildCatalogBrainPrompt(payload);
+  const response = await callGeminiNoSearchWithRetry(prompt, 900);
+  const text = getResponseText(response);
+
+  return {
+    reply: sanitizeFinalText(text),
+    grounded: false,
+    searchQueries: [],
+    sources: [],
+  };
+}
+
 app.get("/", (_req, res) => {
   res.json({
     ok: true,
@@ -597,6 +705,62 @@ Rispondi ora come Zeus.
     });
   }
 });
+
+app.post("/api/catalog/chat", async (req, res) => {
+  try {
+    const {
+      userText,
+      products = [],
+      catalogName = "catalogo",
+      assistantName = "Ted",
+    } = req.body || {};
+
+    if (!userText || typeof userText !== "string") {
+      return res.status(400).json({ error: "userText mancante o non valido" });
+    }
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.json({
+        reply:
+          `Non ho trovato prodotti compatibili nel catalogo ${catalogName}. Prova a specificare meglio categoria, marca, prodotto, prezzo o disponibilità.`,
+        grounded: false,
+        searchQueries: [],
+        sources: [],
+      });
+    }
+
+    const result = await generateCatalogBrainReply({
+      userText,
+      products,
+      catalogName,
+      assistantName,
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error("Errore /api/catalog/chat:", error);
+
+    if (isQuotaExceededError(error)) {
+      return res.status(429).json({
+        error:
+          "Hai raggiunto la quota disponibile di Gemini per questo modello. Riprova più tardi.",
+      });
+    }
+
+    if (isRetryableGeminiError(error)) {
+      return res.status(503).json({
+        error:
+          "Il cervello catalogo è momentaneamente sotto carico. Riprova tra qualche secondo.",
+      });
+    }
+
+    return res.status(500).json({
+      error:
+        "Errore temporaneo nel cervello catalogo. Riprova tra poco.",
+    });
+  }
+});
+
 
 registerCanvaRoutes(app);
 
