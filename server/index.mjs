@@ -538,7 +538,12 @@ function compactCatalogProducts(products = [], maxItems = 40) {
     price: product?.price ?? null,
     old_price: product?.old_price ?? null,
     currency: product?.currency || "EUR",
-    availability: product?.availability || "",
+    availability:
+      String(product?.availability || "").toUpperCase() === "IN_STOCK"
+        ? "disponibile"
+        : String(product?.availability || "").toUpperCase() === "OUT_OF_STOCK"
+          ? "non disponibile"
+          : product?.availability || "",
     available_sizes: Array.isArray(product?.available_sizes)
       ? product.available_sizes.slice(0, 12)
       : [],
@@ -610,6 +615,8 @@ REGOLE NON NEGOZIABILI:
 - Non dire che hai cercato sul web.
 - Non dire che hai fonti web.
 - Non mostrare link grezzi se non necessario: le card prodotto saranno già sotto la risposta.
+- Non scrivere codici tecnici come IN_STOCK o OUT_OF_STOCK. Usa sempre frasi naturali: "disponibile" o "non disponibile".
+- Se tutti i prodotti pertinenti sono non disponibili, dillo subito in modo chiaro e proponi all'utente di affinare la ricerca o scegliere alternative disponibili se presenti.
 
 PRODOTTI_CATALOGO_JSON:
 ${JSON.stringify(compactProducts, null, 2)}

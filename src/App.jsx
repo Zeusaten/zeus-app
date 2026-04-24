@@ -1032,6 +1032,37 @@ function App() {
     try {
       if (isCatalogMode) {
         const filters = extractCatalogFilters(userText);
+        const catalogGreeting = userText.toLowerCase().trim();
+
+        if (
+          [
+            "ciao",
+            "salve",
+            "buongiorno",
+            "buonasera",
+            "buon giorno",
+            "buona sera",
+            "hey",
+            "ei",
+            "hello",
+            "hi",
+          ].includes(catalogGreeting)
+        ) {
+          appendMessageToConversation(conversationId, {
+            sender: "zeus",
+            text: isDemmaMode
+              ? "Ciao, sono Ted. Dimmi cosa cerchi nel catalogo Demma: posso aiutarti con pannolini, latte, salviette, prodotti baby, puericultura, alimentari, cosmetica, casa e molto altro."
+              : "Ciao, sono Pino. Dimmi cosa cerchi nel catalogo New Form: posso aiutarti con uomo, donna, bambino, bambina, brand, colore, taglia e prezzo.",
+            grounded: false,
+            searchQueries: [],
+            sources: [],
+            products: [],
+          });
+
+          setStatusText(isDemmaMode ? "Ted è pronto" : "Pino è pronto");
+          return;
+        }
+
         const results = await searchCatalog(filters, { catalogKey: activeCatalogKey });
         const catalogName = isDemmaMode ? "Demma" : "New Form";
         const catalogAssistantName = isDemmaMode ? "Ted" : "Pino";
