@@ -1108,6 +1108,197 @@ function productMatchesCategory(product, category, config, rawQuery = "") {
   );
 }
 
+
+function tokenLooksLikeAny(token, terms) {
+  const normalizedToken = normalizeText(token);
+  if (!normalizedToken) return false;
+
+  return terms.some((term) => {
+    const normalizedTerm = normalizeText(term);
+    if (!normalizedTerm) return false;
+
+    if (normalizedToken === normalizedTerm) return true;
+    if (normalizedToken.includes(normalizedTerm)) return true;
+    if (normalizedTerm.includes(normalizedToken) && normalizedToken.length >= 4) return true;
+
+    const minLen = Math.min(normalizedToken.length, normalizedTerm.length);
+    if (minLen >= 4) {
+      return levenshtein(normalizedToken, normalizedTerm) <= 2;
+    }
+
+    return false;
+  });
+}
+
+function haystackMatchesAny(haystack, terms) {
+  const normalizedHaystack = normalizeText(haystack);
+  const haystackTokens = tokenize(normalizedHaystack);
+
+  return terms.some((term) => {
+    const normalizedTerm = normalizeText(term);
+    if (!normalizedTerm) return false;
+
+    if (normalizedHaystack.includes(normalizedTerm)) return true;
+
+    const termTokens = tokenize(normalizedTerm).filter((token) => token.length >= 3);
+    if (termTokens.length === 0) return false;
+
+    return termTokens.every((token) => fuzzyTokenMatch(token, haystackTokens));
+  });
+}
+
+const DEMMA_INTENT_GROUPS = [
+  {
+    id: "cambio_pannolino",
+    triggers: ["cambio pannolino", "cambio pannolini", "cambiare pannolino", "cambiare pannolini", "zona cambio", "igiene cambio"],
+    productTerms: [
+      "pannolini",
+      "pannolino",
+      "pannoloni",
+      "batuffi pannolini",
+      "ciko pannolini",
+      "moltex",
+      "salviette",
+      "salviettine",
+      "salv det baby",
+      "det baby",
+      "quadrotti",
+      "crema cambio",
+      "pasta cambio",
+      "pasta protettiva",
+      "detergente baby",
+      "camomilla",
+    ],
+  },
+  {
+    id: "pannolini",
+    triggers: ["pannolini", "pannolino", "panolini", "pannolinni", "pannoloni", "pannolone", "pampers", "huggies", "drynites", "dry nites"],
+    productTerms: [
+      "pannolini",
+      "pannolino",
+      "pannoloni",
+      "pannolone",
+      "batuffi",
+      "ciko pannolini",
+      "moltex",
+      "pampers",
+      "huggies",
+      "drynites",
+      "dry nites",
+      "swimpants",
+      "swim pants",
+      "salvaletto",
+    ],
+  },
+  {
+    id: "humana",
+    triggers: ["humana", "umana", "humanna", "humna", "humama"],
+    productTerms: ["humana"],
+  },
+  {
+    id: "hipp",
+    triggers: ["hipp", "hip", "hippe", "combiotic"],
+    productTerms: ["hipp", "combiotic"],
+  },
+  {
+    id: "parmalat",
+    triggers: ["parmalat", "prima crescita"],
+    productTerms: ["parmalat", "prima crescita"],
+  },
+  {
+    id: "mellin",
+    triggers: ["mellin", "melin"],
+    productTerms: ["mellin"],
+  },
+  {
+    id: "plasmon",
+    triggers: ["plasmon", "plasmom"],
+    productTerms: ["plasmon"],
+  },
+  {
+    id: "latte_infanzia",
+    triggers: ["latte", "late", "latti", "latte 1", "latte 2", "latte 3", "latte crescita", "latte neonati", "latte neonato"],
+    productTerms: [
+      "latte",
+      "humana",
+      "hipp",
+      "combiotic",
+      "parmalat",
+      "prima crescita",
+      "mellin",
+      "plasmon",
+      "aptamil",
+      "nipiol",
+    ],
+  },
+  {
+    id: "salviette",
+    triggers: ["salviette", "salviete", "salvietine", "salviettine", "salvettine"],
+    productTerms: ["salv", "salviette", "salviettine", "salv det", "clendy salv", "idrof il salv", "det baby"],
+  },
+  {
+    id: "biberon_ciucci",
+    triggers: ["biberon", "bibero", "biber", "ciuccio", "ciucio", "ciucci", "succhietto", "tettarella"],
+    productTerms: ["biberon", "ciuccio", "ciucci", "succhietto", "tettarella", "tettarelle"],
+  },
+  {
+    id: "aerosol",
+    triggers: ["aerosol", "areosol", "aereosol", "aerosool", "nebulizzatore"],
+    productTerms: ["aerosol", "nebulizzatore"],
+  },
+  {
+    id: "monster",
+    triggers: ["monster", "moster", "monter", "energy drink", "bevanda energetica"],
+    productTerms: ["monster", "energy"],
+  },
+  {
+    id: "coca_cola",
+    triggers: ["coca cola", "cocacola", "coca", "cola"],
+    productTerms: ["coca cola", "coca-cola", "cola"],
+  },
+  {
+    id: "estathe",
+    triggers: ["estathe", "estate", "esta the", "the freddo", "tè freddo"],
+    productTerms: ["estathe", "esta the"],
+  },
+];
+
+function getDemmaIntentGroups(rawQuery) {
+  const normalizedQuery = normalizeText(rawQuery);
+  const queryTokens = tokenize(normalizedQuery);
+
+  return DEMMA_INTENT_GROUPS.filter((group) => {
+    if (group.triggers.some((trigger) => normalizedQuery.includes(normalizeText(trigger)))) {
+      return true;
+    }
+
+    return queryTokens.some((token) => tokenLooksLikeAny(token, group.triggers));
+  });
+}
+
+function productMatchesDemmaIntent(product, rawQuery) {
+  const groups = getDemmaIntentGroups(rawQuery);
+  if (groups.length === 0) return true;
+
+  // Per evitare falsi positivi da categorie assegnate male,
+  // qui guardiamo soprattutto nome e brand, non solo categoria.
+  const productText = `${product.name || ""} ${product.brand || ""} ${product.description || ""}`;
+
+  return groups.some((group) => haystackMatchesAny(productText, group.productTerms));
+}
+
+function scoreDemmaIntent(product, rawQuery) {
+  const groups = getDemmaIntentGroups(rawQuery);
+  if (groups.length === 0) return 0;
+
+  const productText = `${product.name || ""} ${product.brand || ""} ${product.description || ""}`;
+
+  return groups.reduce((score, group) => {
+    return score + (haystackMatchesAny(productText, group.productTerms) ? 60 : 0);
+  }, 0);
+}
+
+
 function productMatchesAudience(product, audience) {
   if (!audience) return true;
 
@@ -1172,6 +1363,10 @@ function scoreProduct(product, context) {
 
   if (product.old_price && product.price && Number(product.old_price) > Number(product.price)) {
     score += 1;
+  }
+
+  if (context.config?.name === "Sanitaria Demma") {
+    score += scoreDemmaIntent(product, context.rawQuery);
   }
 
   return score;
@@ -1289,6 +1484,34 @@ export async function searchCatalog(filters = {}, options = {}) {
       return String(a.name || "").localeCompare(String(b.name || ""));
     })
     .map(({ _score, ...product }) => product);
+
+  if (catalogKey === CATALOG_KEYS.DEMMA && rawQuery) {
+    const intentFiltered = results.filter((product) =>
+      productMatchesDemmaIntent(product, rawQuery)
+    );
+
+    if (intentFiltered.length > 0) {
+      results = intentFiltered;
+    }
+  }
+
+  if (results.length === 0 && rawQuery && catalogKey === CATALOG_KEYS.DEMMA) {
+    const demmaIntentProducts = products
+      .filter((product) => productMatchesDemmaIntent(product, rawQuery))
+      .map((product) => ({
+        ...product,
+        _score: scoreProduct(product, context),
+      }))
+      .sort((a, b) => {
+        if (b._score !== a._score) return b._score - a._score;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      })
+      .map(({ _score, ...product }) => product);
+
+    if (demmaIntentProducts.length > 0) {
+      results = demmaIntentProducts;
+    }
+  }
 
   if (results.length === 0 && rawQuery) {
     const fallbackTokens = queryTokens.filter((token) => token.length >= 3);

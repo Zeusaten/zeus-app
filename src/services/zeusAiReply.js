@@ -112,6 +112,33 @@ export async function getZeusAiReply(
   };
 }
 
+
+function humanizeCatalogAvailability(value) {
+  const upper = String(value || "").toUpperCase();
+
+  if (upper === "IN_STOCK") return "disponibile";
+  if (upper === "OUT_OF_STOCK") return "non disponibile";
+
+  return value || "";
+}
+
+function compactProductsForCatalogBrain(products = []) {
+  if (!Array.isArray(products)) return [];
+
+  return products.slice(0, 40).map((product) => ({
+    ...product,
+    availability: humanizeCatalogAvailability(product.availability),
+  }));
+}
+
+function sanitizeCatalogBrainText(text) {
+  return String(text || "")
+    .replaceAll("OUT_OF_STOCK", "non disponibile")
+    .replaceAll("IN_STOCK", "disponibile")
+    .trim();
+}
+
+
 export async function getCatalogAiReply({
   userText,
   products = [],
@@ -132,7 +159,7 @@ export async function getCatalogAiReply({
       },
       body: JSON.stringify({
         userText,
-        products: Array.isArray(products) ? products.slice(0, 40) : [],
+        products: compactProductsForCatalogBrain(products),
         catalogName,
         assistantName,
       }),
@@ -157,7 +184,7 @@ export async function getCatalogAiReply({
   const data = await response.json();
 
   return {
-    reply: data.reply || "Non sono riuscito a generare una risposta valida sul catalogo.",
+    reply: sanitizeCatalogBrainText(data.reply) || "Non sono riuscito a generare una risposta valida sul catalogo.",
     grounded: false,
     searchQueries: [],
     sources: [],
