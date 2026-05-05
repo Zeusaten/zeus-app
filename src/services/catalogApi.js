@@ -846,14 +846,22 @@ function resolveAlias(rawQuery, aliasMap, explicitValue = null) {
 }
 
 function resolveCategory(rawQuery, products, config, explicitCategory = null) {
-  const aliasCategory = resolveAlias(rawQuery, config.categoryAliases, explicitCategory);
-  if (aliasCategory) return aliasCategory;
-
   const categories = unique(
     products
       .map((p) => String(p.category || "").trim())
       .filter(Boolean)
   );
+
+  if (explicitCategory) {
+    const exactCategory = categories.find((category) =>
+      fuzzyEquals(category, explicitCategory)
+    );
+
+    if (exactCategory) return exactCategory;
+  }
+
+  const aliasCategory = resolveAlias(rawQuery, config.categoryAliases, explicitCategory);
+  if (aliasCategory) return aliasCategory;
   const query = normalizeText(rawQuery);
   const grams = getNgrams(tokenize(rawQuery), 4);
 
@@ -887,11 +895,40 @@ function resolveAudience(rawQuery, config, explicitAudience = null) {
 function resolveBrand(rawQuery, products, explicitBrand = null) {
   const brands = getUniqueBrands(products);
   const grams = getNgrams(tokenize(rawQuery), 3);
+  const query = normalizeText(rawQuery);
   const queryCompact = compactText(rawQuery);
+  const brandAliases = {
+    tommy: "tommy hilfiger",
+    hilfiger: "tommy hilfiger",
+    calvin: "calvin klein",
+    ck: "calvin klein",
+    liujo: "liu jo",
+    "liu jo": "liu jo",
+    napapijri: "napapijri",
+    napapiri: "napapijri",
+    dsquared: "dsquared2",
+    dsquared2: "dsquared2",
+  };
 
   if (explicitBrand) {
     const exact = brands.find((brand) => fuzzyEquals(brand, explicitBrand));
     if (exact) return exact;
+  }
+
+  for (const [alias, canonical] of Object.entries(brandAliases)) {
+    if (!query.includes(normalizeText(alias))) continue;
+
+    const matchedBrand = brands.find((brand) => {
+      const normalizedBrand = normalizeText(brand);
+      const normalizedCanonical = normalizeText(canonical);
+      return (
+        fuzzyEquals(brand, canonical) ||
+        normalizedBrand.includes(normalizedCanonical) ||
+        normalizedCanonical.includes(normalizedBrand)
+      );
+    });
+
+    if (matchedBrand) return matchedBrand;
   }
 
   for (const brand of brands) {
@@ -906,8 +943,11 @@ function resolveBrand(rawQuery, products, explicitBrand = null) {
   let bestDistance = Infinity;
 
   for (const brand of brands) {
+    const normalizedBrand = normalizeText(brand);
+
     for (const gram of grams) {
-      const distance = levenshtein(brand, gram);
+      const normalizedGram = normalizeText(gram);
+      const distance = levenshtein(normalizedBrand, normalizedGram);
       const minLen = Math.min(compactText(brand).length, compactText(gram).length);
       const threshold = minLen <= 4 ? 1 : Math.max(1, Math.floor(minLen * 0.25));
 
@@ -1046,15 +1086,26 @@ function productMatchesSizeAndAvailability(product, size, availability) {
 
 function fuzzyTokenMatch(token, textTokens) {
   const normalizedToken = normalizeText(token);
-  if (!normalizedToken) return false;
+  if (!normalizedToken || normalizedToken.length < 3) return false;
 
   return textTokens.some((candidate) => {
     const normalizedCandidate = normalizeText(candidate);
-    if (!normalizedCandidate) return false;
+    if (!normalizedCandidate || normalizedCandidate.length < 3) return false;
 
-    if (fuzzyEquals(normalizedToken, normalizedCandidate)) return true;
+    if (normalizedToken === normalizedCandidate) return true;
 
     const minLen = Math.min(normalizedToken.length, normalizedCandidate.length);
+    const maxLen = Math.max(normalizedToken.length, normalizedCandidate.length);
+
+    if (
+      minLen >= 5 &&
+      maxLen - minLen <= 3 &&
+      (normalizedToken.includes(normalizedCandidate) ||
+        normalizedCandidate.includes(normalizedToken))
+    ) {
+      return true;
+    }
+
     if (minLen >= 5) {
       return levenshtein(normalizedToken, normalizedCandidate) <= 2;
     }
@@ -1099,13 +1150,7 @@ function productMatchesCategory(product, category, config, rawQuery = "") {
     }
   }
 
-  const queryTokens = tokenize(rawQuery).filter(
-    (token) => token.length >= 3 && !BASE_STOPWORDS.has(token)
-  );
-
-  return queryTokens.some(
-    (token) => haystack.includes(token) || fuzzyTokenMatch(token, haystackTokens)
-  );
+  return false;
 }
 
 
@@ -1439,6 +1484,17 @@ export async function searchCatalog(filters = {}, options = {}) {
     config,
   };
 
+  const hasHardFilter = Boolean(
+    brand ||
+      category ||
+      audience ||
+      color ||
+      size ||
+      availability ||
+      minPrice != null ||
+      maxPrice != null
+  );
+
   let results = products.filter((product) => {
     if (brand && !fuzzyEquals(product.brand, brand)) return false;
 
@@ -1464,16 +1520,6 @@ export async function searchCatalog(filters = {}, options = {}) {
     }))
     .filter((product) => {
       if (!rawQuery) return true;
-
-      const hasHardFilter =
-        brand ||
-        category ||
-        audience ||
-        color ||
-        size ||
-        availability ||
-        minPrice != null ||
-        maxPrice != null;
 
       if (hasHardFilter) return true;
 
@@ -1513,7 +1559,7 @@ export async function searchCatalog(filters = {}, options = {}) {
     }
   }
 
-  if (results.length === 0 && rawQuery) {
+  if (results.length === 0 && rawQuery && !hasHardFilter) {
     const fallbackTokens = queryTokens.filter((token) => token.length >= 3);
 
     if (fallbackTokens.length > 0) {

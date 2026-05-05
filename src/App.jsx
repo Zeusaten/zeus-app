@@ -178,14 +178,21 @@ function ProductShoppingCard({ product }) {
     : null;
 
   const quantity = Number(product.available_quantity ?? product.quantity ?? NaN);
+  const normalizedAvailability = String(product.availability || "").toLowerCase();
+  const isInStock =
+    normalizedAvailability === "in_stock" ||
+    normalizedAvailability.includes("instock");
+  const isOutOfStock =
+    normalizedAvailability === "out_of_stock" ||
+    normalizedAvailability.includes("outofstock");
   const availabilityText =
     hasSizes
       ? `Taglie: ${sizes}`
       : Number.isFinite(quantity)
         ? `Disponibilità: ${quantity > 0 ? `${quantity} in stock` : "Non disponibile"}`
-        : product.availability === "IN_STOCK"
+        : isInStock
           ? "Disponibile"
-          : product.availability === "OUT_OF_STOCK"
+          : isOutOfStock
             ? "Non disponibile"
             : "Disponibilità da verificare";
 
@@ -361,6 +368,46 @@ function ProductShoppingRail({ products }) {
         </button>
       )}
     </div>
+  );
+}
+
+function ProductCatalogGrid({ products, visibleCount, onLoadMore }) {
+  if (!Array.isArray(products) || products.length === 0) {
+    return (
+      <div className="catalog-empty-state">
+        <div className="catalog-empty-icon">🔎</div>
+        <h3>Nessun prodotto trovato</h3>
+        <p>Prova a cambiare categoria o a scrivere una ricerca più semplice.</p>
+      </div>
+    );
+  }
+
+  const visibleProducts = products.slice(0, visibleCount);
+  const remainingCount = Math.max(products.length - visibleProducts.length, 0);
+
+  return (
+    <>
+      <div className="catalog-grid" role="list" aria-label="Prodotti New Form">
+        {visibleProducts.map((product) => (
+          <ProductShoppingCard
+            key={`${product.id}-${product.url}`}
+            product={product}
+          />
+        ))}
+      </div>
+
+      {remainingCount > 0 && (
+        <div className="catalog-load-more-wrap">
+          <button
+            type="button"
+            className="catalog-load-more"
+            onClick={onLoadMore}
+          >
+            Carica altri {Math.min(24, remainingCount)} prodotti
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -593,6 +640,16 @@ function App() {
     return saved === APP_MODES.NEWFORM ? APP_MODES.NEWFORM : APP_MODES.ZEUS;
   });
 
+  const [activePage, setActivePage] = useState("chat");
+  const [newFormCatalogQuery, setNewFormCatalogQuery] = useState("");
+  const [newFormCatalogDraft, setNewFormCatalogDraft] = useState("");
+  const [newFormCatalogCategory, setNewFormCatalogCategory] = useState("Tutte");
+  const [newFormCatalogProducts, setNewFormCatalogProducts] = useState([]);
+  const [newFormCatalogAllProducts, setNewFormCatalogAllProducts] = useState([]);
+  const [newFormCatalogLoading, setNewFormCatalogLoading] = useState(false);
+  const [newFormCatalogError, setNewFormCatalogError] = useState("");
+  const [newFormCatalogVisibleCount, setNewFormCatalogVisibleCount] = useState(24);
+
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
 
@@ -621,6 +678,23 @@ function App() {
   const isDemmaMode = effectiveMode === APP_MODES.DEMMA;
   const isCatalogMode = isNewFormMode || isDemmaMode;
   const activeCatalogKey = isDemmaMode ? "demma" : "newform";
+  const isNewFormCatalogPage = activePage === "newform-catalog" && isNewFormMode;
+
+  const newFormCatalogCategories = useMemo(() => {
+    const counts = new Map();
+
+    newFormCatalogAllProducts.forEach((product) => {
+      const category = String(product.category || "Altro").trim() || "Altro";
+      counts.set(category, (counts.get(category) || 0) + 1);
+    });
+
+    return [
+      { name: "Tutte", count: newFormCatalogAllProducts.length },
+      ...Array.from(counts.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([name, count]) => ({ name, count })),
+    ];
+  }, [newFormCatalogAllProducts]);
 
   const assistantName = isDemmaMode ? "Ted" : isNewFormMode ? "Pino" : "Zeus";
   const assistantSubtitle = isDemmaMode
@@ -629,11 +703,17 @@ function App() {
       ? "Assistente catalogo New Form"
       : "AI personale";
 
-  const topbarSubtitle = isDemmaMode
-    ? "Catalogo Demma · ricerca prodotti"
-    : isNewFormMode
-      ? "Catalogo New Form · ricerca prodotti"
-      : "Chat personale con memoria, ricerca e fonti";
+  const topbarTitle = isNewFormCatalogPage
+    ? "Catalogo New Form"
+    : currentConversation?.title || "Zeus";
+
+  const topbarSubtitle = isNewFormCatalogPage
+    ? "Tutti i prodotti · categorie · ricerca con Pino"
+    : isDemmaMode
+      ? "Catalogo Demma · ricerca prodotti"
+      : isNewFormMode
+        ? "Catalogo New Form · ricerca prodotti"
+        : "Chat personale con memoria, ricerca e fonti";
 
   const composerPlaceholder = isDemmaMode
     ? "Scrivi a Ted cosa cerchi nel catalogo Demma..."
@@ -737,6 +817,80 @@ function App() {
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [input]);
 
+  useEffect(() => {
+    if (!isNewFormMode && activePage === "newform-catalog") {
+      setActivePage("chat");
+    }
+  }, [activePage, isNewFormMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadNewFormCatalog() {
+      if (!isNewFormCatalogPage) return;
+
+      try {
+        setNewFormCatalogLoading(true);
+        setNewFormCatalogError("");
+
+        const allProducts =
+          newFormCatalogAllProducts.length > 0
+            ? newFormCatalogAllProducts
+            : await searchCatalog({ raw_query: "" }, { catalogKey: "newform" });
+
+        const selectedCategory =
+          newFormCatalogCategory === "Tutte" ? null : newFormCatalogCategory;
+
+        const filteredProducts =
+          !newFormCatalogQuery && selectedCategory
+            ? allProducts.filter(
+                (product) =>
+                  String(product.category || "").trim() === selectedCategory
+              )
+            : await searchCatalog(
+                {
+                  raw_query: newFormCatalogQuery,
+                  category: selectedCategory || undefined,
+                },
+                { catalogKey: "newform" }
+              );
+
+        if (cancelled) return;
+
+        if (newFormCatalogAllProducts.length === 0) {
+          setNewFormCatalogAllProducts(allProducts);
+        }
+
+        setNewFormCatalogProducts(filteredProducts);
+        setNewFormCatalogVisibleCount(24);
+      } catch (error) {
+        console.error(error);
+
+        if (!cancelled) {
+          setNewFormCatalogError(
+            error?.message || "Errore durante il caricamento del catalogo New Form."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setNewFormCatalogLoading(false);
+        }
+      }
+    }
+
+    const debounceId = window.setTimeout(loadNewFormCatalog, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(debounceId);
+    };
+  }, [
+    isNewFormCatalogPage,
+    newFormCatalogAllProducts,
+    newFormCatalogQuery,
+    newFormCatalogCategory,
+  ]);
+
   function patchConversation(conversationId, updater) {
     setConversations((prev) => {
       const updated = prev.map((conv) => {
@@ -757,6 +911,7 @@ function App() {
   }
 
   function createNewChat(mode = effectiveMode) {
+    setActivePage("chat");
     const title =
       mode === APP_MODES.DEMMA
         ? "Demma"
@@ -772,6 +927,7 @@ function App() {
 
   function switchToZeusMode() {
     setAppMode(APP_MODES.ZEUS);
+    setActivePage("chat");
     const newConversation = createConversation("Nuova chat", APP_MODES.ZEUS);
     setConversations((prev) => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
@@ -781,6 +937,7 @@ function App() {
 
   function switchToNewFormMode() {
     setAppMode(APP_MODES.NEWFORM);
+    setActivePage("chat");
     const newConversation = createConversation("New Form", APP_MODES.NEWFORM);
     setConversations((prev) => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
@@ -788,8 +945,19 @@ function App() {
     setStatusText("Pino è pronto");
   }
 
+  function openNewFormCatalogPage() {
+    setAppMode(APP_MODES.NEWFORM);
+    setActivePage("newform-catalog");
+    setStatusText("Pino è pronto");
+  }
+
+  function closeNewFormCatalogPage() {
+    setActivePage("chat");
+  }
+
   function switchToDemmaMode() {
     setAppMode(APP_MODES.DEMMA);
+    setActivePage("chat");
     const newConversation = createConversation("Demma", APP_MODES.DEMMA);
     setConversations((prev) => [newConversation, ...prev]);
     setActiveConversationId(newConversation.id);
@@ -798,6 +966,7 @@ function App() {
   }
 
   function openConversation(conversation) {
+    setActivePage("chat");
     setActiveConversationId(conversation.id);
     setAppMode(
       conversation.mode === APP_MODES.DEMMA
@@ -965,6 +1134,38 @@ function App() {
     } finally {
       setCanvaBusy(false);
     }
+  }
+
+  function handleNewFormCatalogSubmit(e) {
+    e.preventDefault();
+    setNewFormCatalogQuery(newFormCatalogDraft.trim());
+  }
+
+  function handleNewFormCategoryClick(categoryName) {
+    setNewFormCatalogCategory(categoryName);
+  }
+
+  function handleClearNewFormCatalogSearch() {
+    setNewFormCatalogDraft("");
+    setNewFormCatalogQuery("");
+    setNewFormCatalogCategory("Tutte");
+  }
+
+  function handleAskPinoFromCatalog() {
+    const query = newFormCatalogDraft.trim() || newFormCatalogQuery.trim();
+    const categoryPart =
+      newFormCatalogCategory !== "Tutte" ? ` nella categoria ${newFormCatalogCategory}` : "";
+    const message = query
+      ? `${query}${categoryPart}`
+      : `Mostrami prodotti New Form${categoryPart}`;
+
+    setActivePage("chat");
+    setInput(message);
+    setStatusText("Pino è pronto");
+
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
   }
 
   const handleSend = async (e) => {
@@ -1251,6 +1452,28 @@ function App() {
               onClick={switchToDemmaMode}
             >
               Demma
+            </button>
+          )}
+
+          {isNewFormMode && (
+            <button
+              className={`mode-switch-button catalog-page-switch ${
+                isNewFormCatalogPage ? "active" : ""
+              }`}
+              type="button"
+              onClick={openNewFormCatalogPage}
+            >
+              Catalogo prodotti
+            </button>
+          )}
+
+          {isNewFormCatalogPage && (
+            <button
+              className="mode-switch-button zeus-switch"
+              type="button"
+              onClick={closeNewFormCatalogPage}
+            >
+              ← Torna alla chat Pino
             </button>
           )}
 
@@ -1614,130 +1837,220 @@ function App() {
 
           <div>
             <div className="topbar-title">
-              {currentConversation?.title || "Zeus"}
+              {topbarTitle}
             </div>
             <div className="topbar-subtitle">{topbarSubtitle}</div>
           </div>
         </header>
 
-        <section className="chat-area">
-          <div className="chat-inner">
-            {messages.map((message, index) => (
-              <div
-                key={index}
-                className={`message-row ${
-                  message.sender === "user" ? "user-row" : "assistant-row"
-                }`}
-              >
-                {message.sender === "zeus" && (
-                  <div className="assistant-avatar-wrap">
-                    <AssistantAvatar mode={effectiveMode} />
+        {isNewFormCatalogPage ? (
+          <section className="catalog-page">
+            <div className="catalog-hero">
+              <div className="catalog-hero-copy">
+                <div className="catalog-kicker">New Form · Pino</div>
+                <h1>Tutti i prodotti New Form</h1>
+                <p>
+                  Cerca per nome, brand, colore, taglia, reparto o categoria.
+                  Pino usa la stessa logica intelligente della chat catalogo.
+                </p>
+              </div>
+
+              <form className="catalog-search-box" onSubmit={handleNewFormCatalogSubmit}>
+                <div className="catalog-search-label">Cerca con Pino</div>
+                <div className="catalog-search-row">
+                  <input
+                    type="search"
+                    value={newFormCatalogDraft}
+                    onChange={(e) => setNewFormCatalogDraft(e.target.value)}
+                    placeholder="Es. maglia tommy donna, scarpe 39, giacca nera..."
+                  />
+                  <button type="submit">Cerca</button>
+                </div>
+                <div className="catalog-search-actions">
+                  <button
+                    type="button"
+                    className="catalog-soft-button"
+                    onClick={handleAskPinoFromCatalog}
+                  >
+                    Chiedi in chat a Pino
+                  </button>
+                  <button
+                    type="button"
+                    className="catalog-soft-button"
+                    onClick={handleClearNewFormCatalogSearch}
+                  >
+                    Pulisci filtri
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="catalog-category-bar" aria-label="Categorie New Form">
+              {newFormCatalogCategories.map((category) => (
+                <button
+                  key={category.name}
+                  type="button"
+                  className={`catalog-category-chip ${
+                    newFormCatalogCategory === category.name ? "active" : ""
+                  }`}
+                  onClick={() => handleNewFormCategoryClick(category.name)}
+                >
+                  <span>{category.name}</span>
+                  <strong>{category.count}</strong>
+                </button>
+              ))}
+            </div>
+
+            <div className="catalog-results-head">
+              <div>
+                <strong>{newFormCatalogProducts.length}</strong> prodotti trovati
+                {newFormCatalogQuery && (
+                  <span> per “{newFormCatalogQuery}”</span>
+                )}
+                {newFormCatalogCategory !== "Tutte" && (
+                  <span> · categoria {newFormCatalogCategory}</span>
+                )}
+              </div>
+
+              {newFormCatalogLoading && (
+                <div className="catalog-loading-pill">Pino sta cercando...</div>
+              )}
+            </div>
+
+            {newFormCatalogError ? (
+              <div className="catalog-error">{newFormCatalogError}</div>
+            ) : (
+              <ProductCatalogGrid
+                products={newFormCatalogProducts}
+                visibleCount={newFormCatalogVisibleCount}
+                onLoadMore={() =>
+                  setNewFormCatalogVisibleCount((prev) => prev + 24)
+                }
+              />
+            )}
+          </section>
+        ) : (
+          <>
+            <section className="chat-area">
+              <div className="chat-inner">
+                {messages.map((message, index) => (
+                  <div
+                    key={index}
+                    className={`message-row ${
+                      message.sender === "user" ? "user-row" : "assistant-row"
+                    }`}
+                  >
+                    {message.sender === "zeus" && (
+                      <div className="assistant-avatar-wrap">
+                        <AssistantAvatar mode={effectiveMode} />
+                      </div>
+                    )}
+
+                    <div
+                      className={`message-bubble ${
+                        message.sender === "user"
+                          ? "user-bubble"
+                          : "assistant-bubble"
+                      }`}
+                    >
+                      {message.sender === "zeus" ? (
+                        <>
+                          <div className="assistant-name">{assistantName}</div>
+
+                          <div className="assistant-markdown">
+                            <MarkdownMessage text={message.text} />
+                          </div>
+
+                          {message.products?.length > 0 && (
+                            <ProductShoppingRail products={message.products} />
+                          )}
+
+                          {message.grounded && (
+                            <div className="web-badge">
+                              {message.products?.length > 0
+                                ? isDemmaMode
+                                  ? "Catalogo Demma"
+                                  : "Catalogo New Form"
+                                : "Risposta verificata sul web"}
+                            </div>
+                          )}
+
+                          {message.sources?.length > 0 && (
+                            <div className="sources-block">
+                              <div className="sources-title">Fonti</div>
+
+                              <div className="sources-list">
+                                {message.sources.map((source, sourceIndex) => (
+                                  <a
+                                    key={`${source.url}-${sourceIndex}`}
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="source-link"
+                                  >
+                                    {source.title || source.url}
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="user-text">{message.text}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {isLoading && (
+                  <div className="message-row assistant-row">
+                    <div className="assistant-avatar-wrap">
+                      <AssistantAvatar mode={effectiveMode} />
+                    </div>
+
+                    <div className="message-bubble assistant-bubble">
+                      <div className="assistant-name">{assistantName}</div>
+                      <div className="typing-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                <div
-                  className={`message-bubble ${
-                    message.sender === "user"
-                      ? "user-bubble"
-                      : "assistant-bubble"
-                  }`}
-                >
-                  {message.sender === "zeus" ? (
-                    <>
-                      <div className="assistant-name">{assistantName}</div>
-
-                      <div className="assistant-markdown">
-                        <MarkdownMessage text={message.text} />
-                      </div>
-
-                      {message.products?.length > 0 && (
-                        <ProductShoppingRail products={message.products} />
-                      )}
-
-                      {message.grounded && (
-                        <div className="web-badge">
-                          {message.products?.length > 0
-                            ? isDemmaMode
-                              ? "Catalogo Demma"
-                              : "Catalogo New Form"
-                            : "Risposta verificata sul web"}
-                        </div>
-                      )}
-
-                      {message.sources?.length > 0 && (
-                        <div className="sources-block">
-                          <div className="sources-title">Fonti</div>
-
-                          <div className="sources-list">
-                            {message.sources.map((source, sourceIndex) => (
-                              <a
-                                key={`${source.url}-${sourceIndex}`}
-                                href={source.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="source-link"
-                              >
-                                {source.title || source.url}
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="user-text">{message.text}</div>
-                  )}
-                </div>
+                <div ref={messagesEndRef}></div>
               </div>
-            ))}
+            </section>
 
-            {isLoading && (
-              <div className="message-row assistant-row">
-                <div className="assistant-avatar-wrap">
-                  <AssistantAvatar mode={effectiveMode} />
-                </div>
+            <footer className="composer-wrap">
+              <form className="composer" onSubmit={handleSend}>
+                <textarea
+                  ref={textareaRef}
+                  placeholder={composerPlaceholder}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  rows={1}
+                />
 
-                <div className="message-bubble assistant-bubble">
-                  <div className="assistant-name">{assistantName}</div>
-                  <div className="typing-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
+                <div className="composer-bottom">
+                  <div className="composer-hint">
+                    Invio per inviare · Shift+Invio per andare a capo
                   </div>
+
+                  <button
+                    className="send-button"
+                    type="submit"
+                    disabled={isLoading || !input.trim()}
+                  >
+                    Invia
+                  </button>
                 </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef}></div>
-          </div>
-        </section>
-
-        <footer className="composer-wrap">
-          <form className="composer" onSubmit={handleSend}>
-            <textarea
-              ref={textareaRef}
-              placeholder={composerPlaceholder}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-            />
-
-            <div className="composer-bottom">
-              <div className="composer-hint">
-                Invio per inviare · Shift+Invio per andare a capo
-              </div>
-
-              <button
-                className="send-button"
-                type="submit"
-                disabled={isLoading || !input.trim()}
-              >
-                Invia
-              </button>
-            </div>
-          </form>
-        </footer>
+              </form>
+            </footer>
+          </>
+        )}
       </main>
     </div>
   );
