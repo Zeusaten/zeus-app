@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#120a1f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Alley Cat</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-mode="title">
+    <div id="app">
+      <div id="stage">
+        <canvas id="game" aria-label="Vicolo di Alley Cat"></canvas>
+
+        <div class="topbtns">
+          <button id="btn-pause" type="button" aria-label="Pausa">⏸</button>
+          <button id="btn-mute" type="button" aria-label="Audio" aria-pressed="false">🔊</button>
+        </div>
+
+        <div id="overlay" data-screen="title">
+          <section id="screen-title">
+            <h1 class="logo"><span>Alley</span><span>Cat</span></h1>
+            <p class="tagline">Freddy deve scalare il vicolo, catturare i topi e battere i cani.</p>
+            <p class="tap">Tocca per iniziare</p>
+            <p class="credit">Ispirato ad <em>Alley Cat</em> di Bill Williams (1984). Grafica e codice originali.</p>
+          </section>
+
+          <section id="screen-select">
+            <h2>Scegli il livello</h2>
+            <div class="skills">
+              <button type="button" data-skill="0"><b>Kitten</b><small>Per cominciare</small></button>
+              <button type="button" data-skill="1"><b>House Cat</b><small>Un po' di pratica</small></button>
+              <button type="button" data-skill="2"><b>Tomcat</b><small>Si fa seria</small></button>
+              <button type="button" data-skill="3"><b>Alley Cat</b><small>Solo per i duri</small></button>
+            </div>
+            <ul class="howto">
+              <li>◀ ▶ corri · ▲ salta (tieni una freccia per saltare in diagonale)</li>
+              <li>Sali sui bidoni, sullo steccato e sui fili del bucato</li>
+              <li>Prendi i topi sui fili e scappa dal cane</li>
+            </ul>
+            <button type="button" id="btn-back" class="ghost">Indietro</button>
+          </section>
+
+          <section id="screen-pause">
+            <h2>Pausa</h2>
+            <button type="button" id="btn-resume">Riprendi</button>
+            <button type="button" id="btn-quit" class="ghost">Esci al menu</button>
+          </section>
+
+          <section id="screen-gameover">
+            <h2>Game over</h2>
+            <p class="score">Punti <b id="final-score">00000</b></p>
+            <p class="score small">Record <b id="final-hi">00000</b></p>
+            <button type="button" id="btn-again">Rigioca</button>
+            <button type="button" id="btn-menu" class="ghost">Cambia livello</button>
+          </section>
+        </div>
+      </div>
+
+      <div id="controls">
+        <div class="cluster">
+          <button type="button" id="btn-left" class="pad" aria-label="Sinistra">◀</button>
+          <button type="button" id="btn-right" class="pad" aria-label="Destra">▶</button>
+        </div>
+        <div class="cluster">
+          <button type="button" id="btn-jump" class="pad jump" aria-label="Salta">▲</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="game.js"></script>
+  </body>
+</html>
