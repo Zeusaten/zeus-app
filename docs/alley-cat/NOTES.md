@@ -54,6 +54,14 @@ Tutte le stanze (tranne la 2 sott'acqua) hanno **la scopa del padrone** che si m
 - Comandi: frecce + Alt (azione). Salto: Su, anche in diagonale con una freccia [V].
 - Tasti nascosti nel codice (non provati): Ctrl-9 = 9 vite, Ctrl-Y = esci al DOS, Ctrl-S suono, Ctrl-R riparti, Ctrl-M menu, Esc pausa ("paws") [codice V, effetto I].
 
+## Regole ricavate dal codice (aggiornamento) 
+
+- **Entrare da una finestra** (`CS:1B05`): serve che il gatto sia **in salto** (`DS:0571 == 1`), vivo (`DS:055A == 0`), con il rettangolo che si sovrappone a quello della finestra (`DS:1666/1668`, 32x24) e che la finestra sia in una fase di apertura intermedia (`DS:1665` tra 5 e 24). Allora `DS:0551 = 1` e il vicolo finisce [V nel codice, coordinate in unita' CGA]. Quindi non basta stare sul davanzale: bisogna **saltare dentro** una finestra aperta.
+- **Stanze alternate**: a fine di ogni stanza diversa dalla 7, `CS:38B0` pone `DS:0418 = 1` e conta `DS:0414`; la **finestra successiva porta alla stanza 7** (cuori). Dopo la 7 si torna alla scelta casuale [I, dal codice].
+- **Stanza 1 -> 2**: in `CS:3850` si anima il pesce e si controlla la sovrapposizione col rettangolo della boccia (x=228, y=138, 16x24); se il gatto la tocca `DS:0554 = 1` e si passa alla stanza 2 (sott'acqua) [V nel codice].
+- **Bonus di fine stanza** (`CS:38B0`, poi `CS:271E`): i tick del timer sono a 18,2/s. Per le stanze 1-5: `(1350 - tick dall'ingresso) x 2`, minimo 0; per la 6 la soglia e' 2700 e non si raddoppia; per la 7: `(10800 - tick da inizio partita) / 2`. Il valore passa per `CS:3AF4` (conversione in BCD) e va nel punteggio. Per la 7 il bonus si ripete `DS:36DC[livello]` volte (ancora da capire il moltiplicatore, c'e' la stringa `BONUS MULTIPLIER` nei dati) [I].
+- **Tempi delle sorprese nel vicolo** (`CS:04A0`): un contatore per frame che usa la tabella `DS:0532` indicizzata dal livello (`64 50 46 3c 37 32 28 28 ...`), dimezzata (>>2) quando `DS:057B <= 0x60`, cioe' con il gatto in alto [I].
+
 ## Cosa e' implementato nella riedizione (`public/alley-cat/`)
 
 Fatto: titolo, scelta livello (4), vicolo con fisica del gatto, cane, teste nei bidoni, oggetti dalle finestre,
@@ -62,5 +70,5 @@ Fatto: titolo, scelta livello (4), vicolo con fisica del gatto, cane, teste nei 
 Parametri **stimati** (da tarare contro l'originale): velocita' di corsa (130 u/s), altezza salto (~50 u), frequenza
 cane/teste/oggetti per livello, punti per aver raggiunto bidoni/steccato/fili (10/25/50/75/100: scelta mia).
 
-Da fare: le 7 stanze (porta d'ingresso = finestra aperta), regole e punteggi di ciascuna dalle routine sopra,
+Da fare: le 7 stanze (ingresso = saltare dentro una finestra aperta, vedi sopra), regole e punteggi di ciascuna dalle routine sopra,
 collegamento stanza -> stanza (1 -> 2), regalo/stanza 7, musica.
